@@ -1,0 +1,2914 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>DOSAPALM V1 — App de referencia (v7 en vivo)</title>
+<style>
+  :root{
+    --orange:#E8721C; --green:#4CAF50; --green-d:#2f8a34; --blue:#2f6bd6; --ink:#1f2430;
+    --muted:#6b7280; --muted2:#9aa1ad; --bg:#eef1f5; --card:#fff; --line:#e6e9ef;
+    --soft:#f6f8fb; --red:#e04b4b; --amber:#e2a230;
+  }
+  *{box-sizing:border-box}
+  /* pantalla completa: la app ocupa todo el viewport en móvil y en web */
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#dfe4ea;color:var(--ink);padding:0}
+  .wrap{max-width:none;margin:0}
+  .tt,.lead{display:none}
+  h2.tt{margin:0 0 4px;font-size:18px}
+  .lead{color:#5b6472;font-size:13px;margin:0 0 8px}
+  .st{font-size:12px;font-weight:700;padding:5px 10px;border-radius:999px;display:inline-flex;align-items:center;gap:6px}
+  .st .d{width:8px;height:8px;border-radius:50%}
+  .conninp{border:1px solid #d7dce4;border-radius:10px;padding:10px 11px;font-size:14px;font-weight:700;min-width:0}
+  .st.off{background:#eef1f5;color:#6b7280}.st.off .d{background:#c2c8d2}
+  .st.on{background:#e9f6ea;color:var(--green-d)}.st.on .d{background:var(--green)}
+  .btn{border:none;border-radius:10px;padding:9px 14px;font-weight:700;font-size:13px;cursor:pointer}
+  .btn.primary{background:var(--orange);color:#fff}
+  .btn.ghost{background:#fff;border:1px solid #d7dce4;color:#48505e}
+  .stage{display:flex;justify-content:center}
+  .phone{width:100%;background:transparent;border-radius:0;padding:0;box-shadow:none}
+  .screen{background:var(--bg);border-radius:0;overflow:hidden;height:100dvh;display:flex;flex-direction:column;position:relative}
+  /* vista móvil en un monitor grande: columna centrada tipo teléfono */
+  @media(min-width:1024px){
+    body:not(.webmode) .phone{max-width:430px;margin:0 auto;box-shadow:0 0 40px rgba(20,25,40,.25)}
+  }
+  .statusbar{height:30px;background:#111;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-size:11px;font-weight:600}
+  .partners{background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:center;gap:12px;padding:6px 12px}
+  .partners .lbl{font-size:9px;letter-spacing:.06em;color:#9aa1ad;text-transform:uppercase}
+  .apphead{background:linear-gradient(135deg,var(--orange),#f0913f);color:#fff;padding:12px 18px 14px;position:relative}
+  /* acciones de la cabecera (Dosificar): centradas verticalmente en la franja naranja */
+  .headctas{position:absolute;right:14px;top:50%;transform:translateY(-50%);display:flex;gap:8px;align-items:center;z-index:6}
+  .apphead .brand{display:flex;align-items:center;gap:10px}
+  .logo{width:30px;height:30px;flex-shrink:0}
+  .apphead .co{font-size:10px;opacity:.9;letter-spacing:.06em}
+  .apphead .pt{font-size:15px;font-weight:800;line-height:1.1}
+  .scr-title{font-size:11px;text-transform:uppercase;letter-spacing:.1em;opacity:.9;margin-top:9px}
+  .body{flex:1;overflow-y:auto;padding:15px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .muted{color:var(--muted)}
+  .chips{display:flex;gap:7px;flex-wrap:wrap}
+  .chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:5px 9px;border-radius:999px;background:var(--soft);border:1px solid var(--line);color:#495060}
+  .chip .d{width:7px;height:7px;border-radius:50%;background:#c2c8d2}
+  .chip.g .d{background:var(--green)}.chip.a .d{background:var(--amber)}.chip.b .d{background:var(--blue)}.chip.r .d{background:var(--red)}
+  .big-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .act{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:15px 14px;cursor:pointer;transition:.15s}
+  .act:hover{border-color:var(--orange);transform:translateY(-2px)}
+  .act .ic{width:38px;height:38px;border-radius:12px;background:#fff3e9;display:flex;align-items:center;justify-content:center;margin-bottom:9px;font-size:17px}
+  .act .ic.grn{background:#e9f6ea}.act .ic.blu{background:#eaf1fc}.act .ic.prp{background:#efeafc}
+  .act .t{font-weight:700;font-size:13.5px}
+  .act .s{color:var(--muted);font-size:11.5px;margin-top:2px}
+  .fieldlabel{font-size:12px;color:var(--muted);margin:14px 2px 6px;font-weight:600}
+  .input{width:100%;border:1px solid #d7dce4;border-radius:12px;padding:11px 12px;font-size:14px;background:#fff;display:flex;align-items:center;justify-content:space-between}
+  .input .unit{color:var(--muted2);font-size:12px}
+  .stepper{display:flex;align-items:center;border:1px solid #d7dce4;border-radius:12px;overflow:hidden}
+  .stepper button{border:none;background:#f2f4f8;width:46px;height:44px;font-size:20px;color:var(--orange);font-weight:700;cursor:pointer}
+  .stepper .val{flex:1;text-align:center;font-weight:700;font-size:15px}
+  .btn.block{display:block;width:100%;text-align:center;border-radius:14px;padding:14px;font-weight:800;font-size:15px}
+  .btn.green{background:var(--green);color:#fff}
+  .btn.red{background:#fff;border:1px solid #f2c4c4;color:var(--red);font-weight:700}
+  .note{font-size:11px;color:var(--muted2);margin-top:8px}
+  .hint{font-size:11.5px;color:var(--green-d);margin-top:6px;font-weight:600}
+  .stagebars{display:flex;gap:6px;margin:12px 0}
+  .stagebars .sb{flex:1;height:8px;border-radius:6px;background:#e3e7ee;transition:.2s}
+  .stagebars .sb.on{background:var(--orange)}
+  .stagebars .sb.done{background:var(--green)}
+  .kpi{flex:1;text-align:center}
+  .kpi .v{font-size:24px;font-weight:800}
+  .kpi .v.orange{color:var(--orange)}
+  .listitem{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+  .listitem:last-child{border-bottom:none}
+  .listitem .dw{width:30px;height:30px;border-radius:9px;background:#fff3e9;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+  .tabbar{height:56px;background:#fff;border-top:1px solid var(--line);display:flex}
+  .tabbar div{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:9.5px;color:var(--muted2);font-weight:600;cursor:pointer}
+  .tabbar div.on{color:var(--orange)}
+  .tabbar .ic{font-size:16px}
+  .devrow{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid var(--line);border-radius:14px;margin-bottom:10px;cursor:pointer;background:#fff}
+  .devrow.sel{border-color:var(--orange);background:#fff8f2}
+  .devrow .av{width:40px;height:40px;border-radius:11px;background:#fff3e9;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+  .ring{width:118px;height:118px;margin:2px auto}
+  .badgein{display:inline-block;font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:6px}
+  .badgein.adm{background:#efeafc;color:#6b46d1}.badgein.op{background:#e9f6ea;color:#2f8a34}
+  .scrn{flex:1;display:none;flex-direction:column;min-height:0;position:relative}
+  /* indicador "guardado" (esquina superior derecha de Dosificar) */
+  /* barra de progreso del ciclo + tiempos grandes */
+  .ovtimes{display:flex;justify-content:space-between;align-items:center;margin:4px 0 10px;gap:8px}
+  .ovtimes .k{font-size:9.5px;color:var(--muted2);text-transform:uppercase;letter-spacing:.05em}
+  .ovtimes .v{font-size:19px;font-weight:800}
+  .ovtimes .v.big{font-size:30px;color:var(--orange);line-height:1}
+  .ovbar{height:16px;background:#eef1f5;border-radius:999px;overflow:hidden;margin-bottom:10px}
+  #ovBarFill{height:100%;width:0%;background:linear-gradient(90deg,var(--orange),#f0913f);border-radius:999px;transition:width .25s}
+  /* vista Sencilla (dummie): cards grandes, iguales y limpias */
+  .dgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+  .dcard{background:#fff;border:1px solid var(--line);border-radius:16px;padding:13px 14px;display:flex;flex-direction:column;gap:8px;min-height:122px;box-shadow:0 1px 8px rgba(20,25,40,.06)}
+  .dcard .dk{font-size:10.5px;font-weight:800;text-transform:uppercase;color:var(--muted2);letter-spacing:.05em}
+  .dcard .dv{font-size:23px;font-weight:800}
+  .dcard .ds{font-size:10px;color:var(--muted2);margin-top:auto;line-height:1.35}
+  .dstep{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .dstep button{width:38px;height:38px;border-radius:12px;border:1px solid var(--line);background:#fff;font-size:20px;font-weight:800;cursor:pointer;color:#48505e}
+  .dvelrow{display:flex;gap:8px}
+  .dvel{flex:1;border:2px solid var(--line);border-radius:12px;padding:8px 4px;text-align:center;font-size:10.5px;cursor:pointer;color:#48505e;line-height:1.4}
+  .dvel b{font-size:14px}
+  .dvel.on{border-color:var(--orange);background:#fff8f2;color:var(--ink)}
+  /* pulido general */
+  .card{box-shadow:0 1px 8px rgba(20,25,40,.06)}
+  .btn{transition:transform .08s,filter .15s}
+  .btn:active{transform:scale(.97)}
+  .btn.primary:hover{filter:brightness(1.06)}
+  .savedot{display:flex;align-items:center;gap:5px;background:#fff;color:#2f8a34;border-radius:999px;padding:5px 11px;font-size:10.5px;font-weight:800;box-shadow:0 2px 8px rgba(0,0,0,.18);opacity:0;transform:scale(.92);transition:opacity .22s,transform .22s;pointer-events:none}
+  .savedot.show{opacity:1;transform:scale(1)}
+  /* acciones principales de Dosificar: dos cards grandes iguales */
+  .actgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px}
+  .actcard{border:none;border-radius:16px;min-height:100px;padding:14px 10px;font-weight:800;font-size:14px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;box-shadow:0 2px 10px rgba(20,25,40,.12);transition:transform .08s,filter .15s;line-height:1.25}
+  .actcard:active{transform:scale(.97)}
+  .actcard:hover{filter:brightness(1.03)}
+  .actcard .aic{font-size:26px;line-height:1}
+  .actcard .asub{font-size:9.5px;font-weight:600;opacity:.75;text-align:center}
+  .actcard.session{background:#fff;color:#2f8a34;border:1.5px solid #bfe3c6}
+  .actcard.session.on{background:#c0392b;color:#fff;border-color:#c0392b}
+  .actcard.exec{background:var(--orange);color:#fff}
+  .scrn.on{display:flex}
+  /* overlay ciclo */
+  .overlay{position:absolute;inset:0;background:rgba(15,20,30,.72);display:none;align-items:center;justify-content:center;z-index:20;border-radius:32px}
+  .overlay.show{display:flex}
+  .cyc{background:#fff;border-radius:22px;padding:22px;width:84%;text-align:center}
+  .cring{width:132px;height:132px;margin:2px auto 8px}
+  .stagelabel{font-weight:800;font-size:16px;margin-top:4px}
+  .warnbox{background:#fdecec;border:1px solid #f2c4c4;color:#c0392b;border-radius:10px;padding:9px 11px;font-size:12px;font-weight:600;margin-top:10px}
+  .term{background:#0b1017;color:#cdd6e4;border-radius:12px;height:120px;overflow-y:auto;padding:8px 10px;font-family:ui-monospace,Consolas,monospace;font-size:10.5px;line-height:1.45}
+  /* vista Pruebas (admin): controles de la consola con el estilo de la app */
+  .seg{display:flex;background:#eceff4;border-radius:12px;padding:4px;gap:4px}
+  .seg div{flex:1;text-align:center;padding:9px;border-radius:9px;font-size:12.5px;font-weight:700;color:#5b6472;cursor:pointer}
+  .seg div.on{background:#fff;color:var(--orange);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+  .motor{margin-bottom:14px}.motor:last-child{margin-bottom:2px}
+  .mhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;font-size:12.5px;font-weight:700}
+  .mhead .v{font-variant-numeric:tabular-nums;color:var(--muted)}
+  .mrow{display:flex;align-items:center;gap:10px}
+  input[type=range]{-webkit-appearance:none;appearance:none;height:10px;border-radius:6px;background:#e3e7ee;flex:1;outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:26px;height:26px;border-radius:50%;background:var(--orange);border:3px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.25);cursor:pointer}
+  input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;background:var(--orange);border:3px solid #fff}
+  .perif{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .tog{display:flex;align-items:center;justify-content:space-between;background:var(--soft);border:1px solid var(--line);border-radius:11px;padding:9px 11px;font-size:12px;font-weight:600;gap:8px}
+  .sw{width:44px;height:26px;border-radius:999px;background:#cfd5de;position:relative;flex-shrink:0;cursor:pointer;transition:.15s}
+  .sw.on{background:var(--green)}
+  .sw::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.15s}
+  .sw.on::after{left:21px}
+  .retsel{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
+  .retchip{font-size:12.5px;font-weight:700;padding:8px 13px;border-radius:999px;border:1px solid #d7dce4;background:#fff;color:#48505e;cursor:pointer}
+  .retchip.on{background:var(--orange);border-color:var(--orange);color:#fff}
+  .acts{display:flex;flex-wrap:wrap;gap:8px}
+  .acts .btn{flex:1 1 auto;min-width:92px;text-align:center}
+  .cmdrow{display:flex;gap:7px;margin-top:4px}
+  .cmdrow input{flex:1;border:1px solid #d7dce4;border-radius:10px;padding:10px 11px;font-family:ui-monospace,Consolas,monospace;font-size:13px}
+  /* constructor de ciclos + estado del sistema (vista Pruebas) */
+  .steprow{display:flex;gap:7px;align-items:center;margin-bottom:7px}
+  .steprow select,.steprow input{border:1px solid #d7dce4;border-radius:9px;padding:9px;font-size:13px;background:#fff}
+  .steprow select{flex:1;min-width:0}
+  .steprow .del{color:var(--red);cursor:pointer;font-weight:800;padding:6px 8px;flex-shrink:0}
+  .seqbadges{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .seqbadge{font-size:11.5px;font-weight:600;padding:5px 9px;border-radius:8px;background:var(--soft);border:1px solid var(--line);color:#48505e;display:inline-flex;align-items:center;gap:6px}
+  .seqbadge .run{cursor:pointer}
+  .seqbadge .rm{cursor:pointer;color:var(--red);font-weight:800}
+  .sysleds{display:flex;gap:14px;justify-content:center;margin:4px 0 12px}
+  .sysled{display:flex;flex-direction:column;align-items:center;gap:5px;font-size:9.5px;color:var(--muted2)}
+  .sysled .g{width:20px;height:20px;border-radius:50%;background:#e3e7ee;border:1px solid #d3d9e2;transition:.12s}
+  .pbar{height:7px;background:#eef1f5;border-radius:5px;overflow:hidden;margin-top:6px}
+  .pbar>span{display:block;height:100%;width:0;background:var(--orange);transition:width .2s}
+  .sysgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:9px}
+  .sysbox{background:var(--soft);border:1px solid var(--line);border-radius:11px;padding:9px;text-align:center}
+  .sysbox .k{color:var(--muted2);font-size:10px;text-transform:uppercase}
+  .sysbox .v{font-weight:800;font-size:16px;margin-top:3px}
+  /* calibración: gráfica de intervalos hall reales */
+  .calchart{position:relative;height:96px;display:flex;align-items:flex-end;gap:3px;background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:8px 8px 6px;margin-top:10px;overflow:hidden}
+  .calbar{flex:1;min-width:5px;max-width:26px;border-radius:3px 3px 0 0;background:#c2c8d2;transition:height .15s}
+  .calbar.ok{background:var(--green)}
+  .calbar.warn{background:#e2a230}
+  .calbar.bad{background:var(--red)}
+  .caltarget{position:absolute;left:0;right:0;border-top:2px dashed #2f6bd6;pointer-events:none}
+  .caltarget span{position:absolute;right:6px;top:-14px;font-size:9px;color:#2f6bd6;font-weight:700;background:var(--soft);padding:0 3px}
+  .calempty{width:100%;text-align:center;color:var(--muted2);font-size:11px;align-self:center}
+  .calvals{font-family:ui-monospace,Consolas,monospace;font-size:11px;color:#48505e;margin-top:7px;word-break:break-word;line-height:1.6}
+  /* ============ VERSIÓN WEB (escritorio ≥1024px) ============
+     El mismo archivo es la app móvil Y la app web: en pantalla ancha el marco
+     del teléfono se convierte en una aplicación con barra lateral. Mismas
+     vistas, mismo login, mismo protocolo — paridad garantizada. */
+  .sidebar{display:none}
+  @media(min-width:1024px){
+
+    body.webmode{background:#e6eaf0;padding:0}
+    body.webmode .wrap{max-width:none;display:flex;align-items:stretch;min-height:100dvh}
+    body.webmode .tt,body.webmode .lead{display:none}
+    body.webmode .sidebar{display:flex;flex-direction:column;width:232px;flex-shrink:0;background:var(--sidebar,#12261c);border-radius:0;padding:18px 12px;color:#cfe3d6}
+    body.webmode .sidebar .sbrand{padding:4px 10px 16px;border-bottom:1px solid rgba(255,255,255,.1);margin-bottom:12px}
+    body.webmode .sidebar .sbrand .co{font-size:9.5px;letter-spacing:.08em;color:#9db8a6}
+    body.webmode .sidebar .sbrand .pt{font-size:16px;font-weight:800;color:#fff}
+    body.webmode .snav{flex:1}
+    body.webmode .snav div{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;font-size:13.5px;font-weight:600;color:#b9d0c0;cursor:pointer;margin:2px 0}
+    body.webmode .snav div:hover{background:rgba(255,255,255,.07);color:#fff}
+    body.webmode .snav div.on{background:var(--orange);color:#fff}
+    body.webmode .sfoot{border-top:1px solid rgba(255,255,255,.1);padding-top:10px;font-size:11.5px;color:#9db8a6}
+    body.webmode .sfoot .srow{display:flex;align-items:center;gap:7px;padding:4px 10px}
+    body.webmode .sfoot .sdot{width:8px;height:8px;border-radius:50%;background:#c2c8d2;flex-shrink:0}
+    body.webmode .sfoot .sdot.on{background:var(--green)}
+    body.webmode .sfoot button{width:100%;margin-top:8px;border:1px solid rgba(255,255,255,.18);background:transparent;color:#cfe3d6;border-radius:10px;padding:9px;font-weight:700;font-size:12.5px;cursor:pointer}
+    body.webmode .sfoot button:hover{background:rgba(255,255,255,.08)}
+    body.webmode .stage{flex:1;min-width:0}
+    body.webmode .phone{width:100%;max-width:none;margin:0;background:transparent;border-radius:0;padding:0;box-shadow:none}
+    body.webmode .screen{height:100dvh;border-radius:0}
+    body.webmode .statusbar{display:none}
+    body.webmode .partners{display:none}
+    body.webmode .tabbar{display:none}
+    body.webmode .scrn .body{width:100%;max-width:880px;margin:0 auto;padding:22px 30px 40px}
+    body.webmode .apphead{padding:16px 30px}
+    /* login web: tarjeta centrada, sin barra lateral */
+    body.webmode.on-login{padding:28px 20px}
+    body.webmode.on-login .wrap{min-height:0}
+    body.webmode.on-login .sidebar{display:none}
+    body.webmode.on-login .phone{max-width:430px;margin:0 auto;border-radius:22px;box-shadow:0 24px 60px rgba(20,25,40,.16)}
+    body.webmode.on-login .screen{border-radius:22px;min-height:640px;height:auto}
+  
+  }
+  #viewToggle{display:none;position:fixed;right:18px;bottom:18px;z-index:99;background:#12261c;color:#cfe3d6;border:none;border-radius:999px;padding:11px 16px;font-weight:700;font-size:12.5px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+  @media(min-width:1024px){ #viewToggle{display:block} }
+  /* login por perfil + configuración de perfil */
+  .profsel.sel{border-color:var(--orange);background:#fff8f2}
+  .pwin{width:100%;border:1px solid #d7dce4;border-radius:12px;padding:12px;font-size:15px;letter-spacing:.12em}
+  .numin{width:100%;border:1px solid #d7dce4;border-radius:12px;padding:11px 12px;font-size:15px;font-weight:700;text-align:center;background:#fff}
+  .numin:disabled{background:var(--soft);color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h2 class="tt">DOSAPALM V1 — App de referencia</h2>
+  <p class="lead">Estilo de la app demo v3, <b>cableada de verdad</b> al firmware v7 vía WebSocket (misma librería de protocolo que usará la app Flutter). Maneja el equipo/simulador real.</p>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <button id="viewToggle" title="Alternar entre la vista web y la vista móvil">&#128241; Vista móvil</button>
+  <aside class="sidebar" id="sideNav">
+    <div class="sbrand">
+      <div class="co">ENVASES S.A.S · PROTIPARK</div>
+      <div class="pt">DOSAPALM V1</div>
+    </div>
+    <div class="snav" id="sNav"></div>
+    <div class="sfoot">
+      <div class="srow"><span class="sdot" id="sDot"></span><span id="sConn">Desconectado</span></div>
+      <div class="srow" id="sUser">—</div>
+      <button id="sLogout">Cerrar sesión</button>
+    </div>
+  </aside>
+  <div class="stage">
+    <div class="phone"><div class="screen">
+      <div class="statusbar"><span id="clock">4:09</span><span>DOSAPALM V1</span><span id="linkTop">— </span></div>
+      <div class="partners"><span class="lbl">Envases · Protipark · Cenipalma · Inparme</span></div>
+
+      <!-- overlay ciclo: progreso en BARRA con tiempos grandes -->
+      <div class="overlay" id="cycOverlay"><div class="cyc">
+        <div class="ovtimes">
+          <div><div class="k">Transcurrido</div><div class="v" id="ovElapsed">0.0 s</div></div>
+          <div style="text-align:center"><div class="v big" id="cpct">0%</div><div class="k" id="csub">—</div></div>
+          <div style="text-align:right"><div class="k">Estimado total</div><div class="v" id="ovTotal">—</div></div>
+        </div>
+        <div class="ovbar"><div id="ovBarFill"></div></div>
+        <div class="stagelabel" id="stageLabel">Preparando…</div>
+        <div class="muted" id="stageSub" style="font-size:12px;margin-top:2px">—</div>
+        <div class="stagebars" id="ovBars"><div class="sb"></div><div class="sb"></div><div class="sb"></div></div>
+        <div class="warnbox" id="ovWarn" style="display:none"></div>
+        <button class="btn red block" id="btnParar" style="margin-top:12px">Parar</button>
+      </div></div>
+
+      <!-- LOGIN -->
+      <div class="scrn on" data-scrn="login">
+        <div class="apphead"><div class="brand"><svg class="logo" viewBox="0 0 48 48"><rect x="8" y="14" width="26" height="26" rx="4" fill="#fff"/><rect x="10" y="16" width="22" height="22" rx="3" fill="#E8721C"/><rect x="34" y="20" width="6" height="9" rx="2" fill="#E8721C"/></svg><div><div class="co">ENVASES S.A.S</div><div class="pt">DOSAPALM V1</div></div></div></div>
+        <div class="body" style="justify-content:center;display:flex;flex-direction:column">
+          <div style="text-align:center;margin-bottom:8px"><div style="font-size:16px;font-weight:800">Bienvenido</div><div class="muted" style="font-size:12.5px">Selecciona tu perfil e ingresa tu contraseña</div></div>
+          <div class="card profsel" style="cursor:pointer" id="profAdmin" data-prof="admin"><div class="row"><div><div style="font-weight:700">Administrador <span class="badgein adm">TOTAL</span></div><div class="muted" style="font-size:11.5px">Pruebas, parámetros, turbina, tiempos</div></div><div style="font-size:20px">&#9881;</div></div></div>
+          <div class="card profsel" style="cursor:pointer" id="profOp" data-prof="operador"><div class="row"><div><div style="font-weight:700">Operador <span class="badgein op">BÁSICO</span></div><div class="muted" style="font-size:11.5px">Dosificar, sesión, mapa</div></div><div style="font-size:20px">&#128100;</div></div></div>
+          <div class="fieldlabel">Contraseña</div>
+          <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
+          <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
+          <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
+          <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
+        </div>
+      </div>
+
+      <!-- DISPOSITIVOS -->
+      <div class="scrn" data-scrn="dispositivos">
+        <div class="apphead"><div class="brand"><svg class="logo" viewBox="0 0 48 48"><rect x="8" y="14" width="26" height="26" rx="4" fill="#fff"/><rect x="10" y="16" width="22" height="22" rx="3" fill="#E8721C"/></svg><div><div class="co">ENVASES S.A.S</div><div class="pt">DOSAPALM V1</div></div></div><div class="scr-title">Mis equipos</div></div>
+        <div class="body">
+          <div class="muted" style="font-size:12px;margin-bottom:8px">Equipo actual</div>
+          <div class="devrow sel" id="devRow"><div class="av">&#128225;</div><div style="flex:1"><div style="font-weight:700" id="devSerial">—</div><div class="muted" style="font-size:11.5px" id="devSub">Sin conectar</div></div><span class="chip" id="devChip"><span class="d"></span>Offline</span></div>
+          <button class="btn primary block" data-go="vincular" id="btnGoVincular" style="margin-top:10px">+ Vincular nuevo equipo (QR)</button>
+        </div>
+        <div class="tabbar" data-tabs></div>
+      </div>
+
+      <!-- HOME -->
+      <div class="scrn" data-scrn="home">
+        <div class="apphead"><div class="brand"><svg class="logo" viewBox="0 0 48 48"><rect x="8" y="14" width="26" height="26" rx="4" fill="#fff"/><rect x="10" y="16" width="22" height="22" rx="3" fill="#E8721C"/></svg><div><div class="co">ENVASES S.A.S</div><div class="pt" id="homeSerial">DOSAPALM V1</div></div></div><div class="scr-title">Estado del equipo</div></div>
+        <div class="body">
+          <!-- conexión al equipo: Bluetooth por defecto, Wi-Fi como alternativa -->
+          <div class="card">
+            <div class="row" style="margin-bottom:9px">
+              <span style="font-weight:700;font-size:13px">Conexión al equipo</span>
+              <span class="st off" id="connSt"><span class="d"></span><span id="connTxt">Desconectado</span></span>
+            </div>
+            <button class="btn primary block" id="btnBle" style="font-size:15px;padding:14px 0">&#128266; Conectar por Bluetooth</button>
+            <div style="display:flex;gap:7px;margin-top:9px">
+              <input class="conninp" id="host" value="192.168.4.1" style="flex:1.5" placeholder="192.168.4.1" autocapitalize="off"/>
+              <input class="conninp" id="port" value="81" style="width:64px;text-align:center" inputmode="numeric"/>
+              <button class="btn ghost" id="btnConnect" style="flex:1">&#128246; Wi-Fi</button>
+            </div>
+            <div class="note">Bluetooth: el equipo debe estar en <code>conn ble</code>. Wi-Fi: únete primero a la red del equipo (su serial es el nombre). Serial: <b id="serialTxt">—</b> · Firmware: <b id="fwTxt">—</b></div>
+          </div>
+          <div class="card" style="text-align:center">
+            <svg class="ring" viewBox="0 0 120 120">
+              <circle cx="60" cy="60" r="50" fill="none" stroke="#eef1f5" stroke-width="11"/>
+              <circle id="homeRing" cx="60" cy="60" r="50" fill="none" stroke="#4CAF50" stroke-width="11" stroke-linecap="round" stroke-dasharray="314" stroke-dashoffset="314" transform="rotate(-90 60 60)"/>
+              <text id="homeRingT" x="60" y="55" text-anchor="middle" font-size="17" font-weight="800" fill="#1f2430">—</text>
+              <text x="60" y="73" text-anchor="middle" font-size="9" fill="#6b7280">GPS</text>
+            </svg>
+            <div class="chips" style="justify-content:center">
+              <span class="chip" id="chLink"><span class="d"></span>Wi-Fi</span>
+              <span class="chip" id="chGps"><span class="d"></span>GPS</span>
+              <span class="chip" id="chHall"><span class="d"></span>Hall</span>
+              <span class="chip" id="chMode"><span class="d"></span>Modo</span>
+            </div>
+            <div class="note">Batería: no disponible (el firmware v7 no la reporta aún)</div>
+          </div>
+          <div class="big-actions">
+            <div class="act" data-go="dosificar"><div class="ic">&#128167;</div><div class="t">Dosificar</div><div class="s">Ejecutar ciclo</div></div>
+            <div class="act" data-go="stats"><div class="ic grn">&#128202;</div><div class="t">Data</div><div class="s">Sesión y estadísticas</div></div>
+            <div class="act" data-go="mapa"><div class="ic blu">&#128506;</div><div class="t">Mapa</div><div class="s">Georreferencia</div></div>
+            <div class="act" data-go="alertas"><div class="ic prp">&#128276;</div><div class="t">Alertas</div><div class="s" id="alertCount">Sin alertas</div></div>
+            <div class="act" data-go="perfil"><div class="ic">&#128100;</div><div class="t">Perfil</div><div class="s" id="perfilSub">—</div></div>
+          </div>
+        </div>
+        <div class="tabbar" data-tabs></div>
+      </div>
+
+      <!-- DOSIFICAR -->
+      <div class="scrn" data-scrn="dosificar">
+        <div class="apphead"><div class="brand"><svg class="logo" viewBox="0 0 48 48"><rect x="8" y="14" width="26" height="26" rx="4" fill="#fff"/><rect x="10" y="16" width="22" height="22" rx="3" fill="#E8721C"/></svg><div><div class="co">ENVASES S.A.S</div><div class="pt">DOSAPALM V1</div></div></div><div class="scr-title">Dosificar</div>
+          <!-- confirmación de guardado, centrada en la franja naranja -->
+          <div class="headctas">
+            <div class="savedot" id="saveDot">&#10003; Guardado</div>
+          </div>
+        </div>
+        <div class="body">
+          <!-- VISTA SENCILLA (dummie): cards grandes e iguales; se activa en Configuración -->
+          <div id="dumFields" style="display:none">
+            <div class="dgrid">
+              <div class="dcard"><div class="dk">&#128167; Dosis</div><div class="dstep"><button id="dmM">&#8722;</button><div class="dv"><span id="dumDosis">15</span> g</div><button id="dmP">+</button></div><div class="ds" id="dumDosisSub">a la salida de la manguera</div></div>
+              <div class="dcard"><div class="dk">&#127788; Velocidad</div><div class="dvelrow" id="dumVelRow"></div><div class="ds" id="dumVelSub">calibradas en Configuración</div></div>
+              <div class="dcard"><div class="dk">&#9201; Tiempo inicial</div><select class="numin" id="dumTini" style="margin:0;text-align:left"></select><div class="ds">limpieza del ducto antes de aplicar</div></div>
+              <div class="dcard"><div class="dk">&#9201; Tiempo final</div><select class="numin" id="dumTfin" style="margin:0;text-align:left"></select><div class="ds">limpieza al terminar</div></div>
+              <div class="dcard"><div class="dk">&#9881; Retardo</div><select class="numin" id="dumRet" style="margin:0;text-align:left"></select><div class="ds">entre cavidades · solo calibrados</div></div>
+              <div class="dcard"><div class="dk">&#128337; Tiempo estimado</div><div class="dv" id="dumTiempo">—</div><div class="ds">del ciclo completo (inicio + aplicación + final)</div></div>
+            </div>
+          </div>
+          <div id="proFields">
+          <div class="fieldlabel">Dosis deseada (a la salida de la manguera)</div>
+          <div class="stepper"><button id="dMinus">&#8722;</button><div class="val"><span id="dosisVal">15</span> <span style="font-size:11px;color:#9aa1ad">g</span></div><button id="dPlus">+</button></div>
+          <div class="fieldlabel">Pérdida en la manguera (%)</div>
+          <input type="number" class="numin" id="inPerdida" min="0" max="90" step="5" value="60"/>
+          <div class="hint" id="perdidaNote" style="margin-top:2px"></div>
+          <div class="hint" id="doseHint"></div>
+          <!-- Todos los parámetros editables (misma vista para Admin y Operador) -->
+          <div id="advFields">
+            <div style="display:flex;gap:10px">
+              <div style="flex:1"><div class="fieldlabel">Turbina (m/s)</div><select class="numin" id="inTurbVel" style="text-align:left"></select></div>
+              <div style="flex:1"><div class="fieldlabel">T. inicial (ms)</div><input type="number" class="numin" id="inTini" min="0" step="100" value="2500"/></div>
+              <div style="flex:1"><div class="fieldlabel">T. final (ms)</div><input type="number" class="numin" id="inTfin" min="0" step="100" value="3500"/></div>
+            </div>
+            <div class="hint" id="turbVelNote" style="margin-top:2px"></div>
+            <!-- Piñón dosificador: se configura en Configuración, aquí solo se elige -->
+            <div class="fieldlabel">Piñón dosificador</div>
+            <select class="numin" id="inPinon" style="text-align:left"></select>
+            <div class="hint" id="pinonNote"></div>
+            <div class="fieldlabel">Retardo entre cavidades (ms)</div>
+            <select class="numin" id="inRetardo" style="text-align:left"></select>
+            <div class="note" style="margin-top:4px">Solo se pueden elegir los retardos <b>ya calibrados</b> en Configuración → Calibración del retardo; los grises no tienen calibración todavía.</div>
+            <div class="note">Cada cambio se <b>aplica al equipo al instante</b> y queda guardado — el chip "✓ Guardado" de arriba lo confirma.</div>
+          </div>
+          </div><!-- /proFields -->
+          <!-- Solo Operador: resumen de la configuración fijada por el Admin -->
+          <div id="opSummary" class="card" style="display:none;background:var(--soft)">
+            <div class="row"><span class="muted" style="font-size:12px">Configuración del equipo</span><span class="muted" style="font-size:10.5px">la fija el Administrador</span></div>
+            <div class="chips" style="margin-top:8px" id="opSummaryChips"></div>
+          </div>
+          <div class="card" style="margin-top:14px;background:var(--soft)">
+            <div class="row"><span style="font-weight:700;font-size:12.5px">Ciclo de 3 etapas</span><span class="muted" style="font-size:11px" id="cycleDesc">≈ T.ini + dosis + T.fin</span></div>
+            <div class="stagebars"><div class="sb on"></div><div class="sb"></div><div class="sb"></div></div>
+            <div class="row" style="font-size:10.5px;color:#6b7280"><span>Limpieza inicial</span><span>Aplicación</span><span>Limpieza final</span></div>
+            <div class="muted" style="font-size:10px;margin-top:6px;line-height:1.5"><b>1)</b> Solo turbina (T. inicial): limpia el ducto de residuos. <b>2)</b> Turbina + dosificador + tolva: aplica hasta completar los gramos (dura lo que marque el conteo hall). <b>3)</b> Solo turbina (T. final): expulsa el material residual.</div>
+          </div>
+          <!-- acciones principales: dos cards grandes del mismo tamaño -->
+          <div class="actgrid">
+            <button class="actcard session" id="btnSession" title="Inicia una operación para acumular las aplicaciones"><span class="aic">&#9654;</span>Iniciar operación<span class="asub">guarda las aplicaciones en Data</span></button>
+            <button class="actcard exec" id="btnDosificar"><span class="aic">&#128167;</span>Ejecutar ciclo<span class="asub">también con el botón RF del equipo</span></button>
+          </div>
+        </div>
+        <div class="tabbar" data-tabs></div>
+      </div>
+
+      <!-- MAPA -->
+      <div class="scrn" data-scrn="mapa">
+        <div class="apphead"><div class="brand"><svg class="logo" viewBox="0 0 48 48"><rect x="8" y="14" width="26" height="26" rx="4" fill="#fff"/><rect x="10" y="16" width="22" height="22" rx="3" fill="#E8721C"/></svg><div><div class="co">ENVASES S.A.S</div><div class="pt">DOSAPALM V1</div></div></div><div class="scr-title">Mapa / Historial</div></div>
+        <div class="body">
+          <div id="leafmap" style="height:250px;border-radius:14px;border:1px solid var(--line);background:#e6ebe2;margin-bottom:10px"></div>
+          <div class="legend" style="display:flex;gap:12px;flex-wrap:wrap;font-size:10.5px;color:#5b6472;margin-bottom:10px">
+            <span><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#E8721C;margin-right:4px"></i>Con GPS</span>
+            <span><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#c2c8d2;margin-right:4px"></i>Sin señal (últ. punto)</span>
+          </div>
+          <div class="card">
+            <div class="row"><span style="font-weight:700;font-size:13px">Aplicaciones georreferenciadas</span><span class="muted" style="font-size:11px" id="mapCount">0</span></div>
+            <div class="note">Cada punto usa el GPS del equipo, o el último punto conocido si estaba sin señal bajo palma. El fondo satelital requiere internet; sin él, los puntos igual quedan en la lista.</div>
+          </div>
+          <div id="mapList"></div>
+          <button class="btn ghost block" id="btnExport" style="margin-top:6px">Exportar GeoJSON</button>
+        </div>
+        <div class="tabbar" data-tabs></div>
+      </div>
+
+      <!-- ESTADÍSTICAS -->
+      <div class="scrn" data-scrn="stats">
+        <div class="apphead"><div class="brand"><svg class="logo" viewBox="0 0 48 48"><rect x="8" y="14" width="26" height="26" rx="4" fill="#fff"/><rect x="10" y="16" width="22" height="22" rx="3" fill="#E8721C"/></svg><div><div class="co">ENVASES S.A.S</div><div class="pt">DOSAPALM V1</div></div></div><div class="scr-title">Data</div></div>
+        <div class="body">
+          <!-- Sesión de trabajo (antes en su propia pestaña) -->
+          <div style="display:flex;gap:10px">
+            <div class="card kpi"><div class="muted" style="font-size:11px">Aplicaciones</div><div class="v orange" id="sApps">0</div></div>
+            <div class="card kpi"><div class="muted" style="font-size:11px">Prod. teórico aplicado</div><div class="v" id="sGrams">0<span style="font-size:12px;color:#9aa1ad"> g</span></div></div>
+            <div class="card kpi"><div class="muted" style="font-size:11px">Prod. real (con pérdida)</div><div class="v" id="sGramsReal" style="color:#2f8a34">0<span style="font-size:12px;color:#9aa1ad"> g</span></div></div>
+          </div>
+          <div class="card">
+            <div class="row" style="margin-bottom:6px"><span style="font-weight:700;font-size:13px">Aplicaciones de esta sesión</span><span class="muted" style="font-size:11px" id="sPending">0 por sincronizar</span></div>
+            <div id="eventList"><div class="muted" style="font-size:12px">Aún no hay aplicaciones.</div></div>
+          </div>
+          <div class="sysgrid">
+            <div class="sysbox"><div class="k">Aplicaciones</div><div class="v" style="color:var(--orange);font-size:22px" id="stApps">0</div></div>
+            <div class="sysbox"><div class="k">Prod. teórico</div><div class="v" style="font-size:22px"><span id="stGrams">0</span><span class="muted" style="font-size:11px"> g</span></div></div>
+            <div class="sysbox"><div class="k">Prom / dosis</div><div class="v" style="font-size:22px"><span id="stAvg">0</span><span class="muted" style="font-size:11px"> g</span></div></div>
+          </div>
+          <div class="card">
+            <div class="row" style="margin-bottom:4px"><span style="font-weight:700;font-size:13px">Aplicaciones en el tiempo</span><span class="muted" style="font-size:10.5px">sesión actual</span></div>
+            <div class="muted" style="font-size:11px;margin-bottom:6px">Velas: divide la sesión en intervalos iguales.</div>
+            <div class="retsel" id="velasSel" style="margin-top:0"></div>
+            <div class="calchart" id="stChart" style="height:110px"><div class="calempty">Sin aplicaciones en la sesión.</div></div>
+            <div class="row" style="font-size:9.5px;color:#9aa1ad;margin-top:4px"><span id="stT0">—</span><span id="stT1">—</span></div>
+          </div>
+          <div class="card">
+            <div style="font-weight:700;font-size:13px;margin-bottom:6px">Resultados</div>
+            <div class="chips" id="stResults"></div>
+          </div>
+        </div>
+        <div class="tabbar" data-tabs></div>
+      </div>
+
+      <!-- VINCULAR QR -->
+      <div class="scrn" data-scrn="vincular">
+        <div class="apphead"><div class="brand"><svg class="logo" viewBox="0 0 48 48"><rect x="8" y="14" width="26" height="26" rx="4" fill="#fff"/><rect x="10" y="16" width="22" height="22" rx="3" fill="#E8721C"/></svg><div><div class="co">ENVASES S.A.S</div><div class="pt">DOSAPALM V1</div></div></div><div class="scr-title">Vincular equipo · QR</div></div>
+        <div class="body">
+          <div class="muted" style="font-size:12px;text-align:center;margin-bottom:8px;color:#3d6db5">Escanea el código QR impreso en la PCB (o el del exterior del equipo) para vincular y trazar el equipo.</div>
+          <div id="qrIllu" style="margin:6px auto 12px;width:172px;height:172px;border:2px dashed #c9d2de;border-radius:18px;display:flex;align-items:center;justify-content:center;background:#fff">
+            <svg width="118" height="118" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+              <g fill="#1a1f24" fill-rule="evenodd">
+                <path d="M4 4h34v34H4z M12 12h18v18H12z"/>
+                <path d="M82 4h34v34H82z M90 12h18v18H90z"/>
+                <path d="M4 82h34v34H4z M12 90h18v18H12z"/>
+              </g>
+              <g fill="#1a1f24">
+                <rect x="50" y="14" width="9" height="9"/><rect x="64" y="26" width="9" height="9"/>
+                <rect x="50" y="44" width="9" height="9"/><rect x="70" y="50" width="9" height="9"/>
+                <rect x="88" y="52" width="9" height="9"/><rect x="46" y="70" width="9" height="9"/>
+                <rect x="60" y="78" width="9" height="9"/><rect x="78" y="72" width="9" height="9"/>
+                <rect x="96" y="82" width="9" height="9"/><rect x="52" y="96" width="9" height="9"/>
+                <rect x="74" y="98" width="9" height="9"/><rect x="94" y="104" width="9" height="9"/>
+              </g>
+              <rect x="-6" y="56" width="132" height="6" rx="3" fill="#E8721C"/>
+            </svg>
+          </div>
+          <video id="qrVideo" playsinline style="width:100%;height:230px;object-fit:cover;border-radius:14px;background:#101820;display:none"></video>
+          <button class="btn primary block" id="qrStart">&#128247; Escanear QR con la cámara</button>
+          <div class="warnbox" id="qrErr" style="display:none"></div>
+          <div class="fieldlabel">O escribe el serial de la etiqueta</div>
+          <div style="display:flex;gap:7px">
+            <input id="qrManual" placeholder="DOSAPALM-50083" autocapitalize="characters" style="flex:1;border:1px solid #d7dce4;border-radius:10px;padding:11px;font-size:14px;font-weight:700"/>
+            <button class="btn ghost" id="qrManualGo">Registrar</button>
+          </div>
+          <div class="card" style="margin-top:12px">
+            <div style="font-weight:700;font-size:13px;margin-bottom:6px">Equipos registrados</div>
+            <div id="qrList"><div class="muted" style="font-size:12px">Ninguno todavía.</div></div>
+          </div>
+          <button class="btn ghost block" id="qrBack">Volver a Mis equipos</button>
+        </div>
+        <div class="tabbar" data-tabs></div>
+      </div>
+
+      <!-- ALERTAS -->
+      <div class="scrn" data-scrn="alertas">
+        <div class="apphead"><div class="brand"><svg class="logo" viewBox="0 0 48 48"><rect x="8" y="14" width="26" height="26" rx="4" fill="#fff"/><rect x="10" y="16" width="22" height="22" rx="3" fill="#E8721C"/></svg><div><div class="co">ENVASES S.A.S</div><div class="pt">DOSAPALM V1</div></div></div><div class="scr-title">Alertas</div></div>
+        <div class="body"><div class="card"><div id="alertList"><div class="muted" style="font-size:12px">Sin alertas.</div></div></div></div>
+        <div class="tabbar" data-tabs></div>
+      </div>
+
+      <!-- CONFIGURACIÓN (solo Admin): calibraciones y catálogos del equipo -->
+      <div class="scrn" data-scrn="config">
+        <div class="apphead"><div class="brand"><svg class="logo" viewBox="0 0 48 48"><rect x="8" y="14" width="26" height="26" rx="4" fill="#fff"/><rect x="10" y="16" width="22" height="22" rx="3" fill="#E8721C"/></svg><div><div class="co">ENVASES S.A.S</div><div class="pt">DOSAPALM V1</div></div></div><div class="scr-title">Configuración · Admin</div></div>
+        <div class="body">
+          <div class="card">
+            <div style="font-weight:700;font-size:13px;margin-bottom:9px">Vista de Dosificar</div>
+            <div class="seg" id="uiSeg"><div data-ui="pro">Pro</div><div data-ui="dummie">Sencilla</div></div>
+            <div class="note"><b>Pro</b>: todos los parámetros como hasta ahora. <b>Sencilla</b>: tarjetas grandes con lo esencial — dosis, velocidad baja (15 m/s) / alta (21 m/s), tiempos y retardo.</div>
+          </div>
+
+          <div class="card">
+            <div style="font-weight:700;font-size:13px;margin-bottom:2px">Calibración del retardo</div>
+            <div class="muted" style="font-size:11px;margin-bottom:10px">Cada barra es una <b>lectura real del hall</b>: el tiempo entre una cavidad y la siguiente, medido con el reloj del equipo. La línea azul es el objetivo; el lazo de control debe converger a ±15% (verde).</div>
+            <div class="sysgrid" style="grid-template-columns:repeat(4,1fr)">
+              <div class="sysbox" style="background:#fff8f2;border-color:#f0cdb0"><div class="k" style="color:var(--orange)">Objetivo</div><select class="numin" id="calPoint" style="width:100%;padding:6px 4px;font-size:13px;text-align:center;margin-top:3px;border-color:#f0cdb0"></select></div>
+              <div class="sysbox"><div class="k">Promedio</div><div class="v" id="calMeas" style="font-size:14px">—</div></div>
+              <div class="sysbox"><div class="k">Desviación</div><div class="v" id="calDev" style="font-size:14px">—</div></div>
+              <div class="sysbox"><div class="k">Mín / Máx</div><div class="v" id="calMinMax" style="font-size:14px">—</div></div>
+            </div>
+            <div class="calchart" id="calChart"><div class="calempty">Sin lecturas: calibra un punto para medir (solo dosificador).</div></div>
+            <div class="calvals" id="calVals"></div>
+            <div class="hint" id="calHint"></div>
+
+            <div class="fieldlabel">Tiempo de medición del punto</div>
+            <select class="numin" id="calSecs" style="text-align:left" title="Tiempo de calibración por punto"></select>
+            <div class="row" style="background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:9px 10px;margin-top:8px;font-size:12px">
+              <span>PWM en el GPIO del dosificador <span class="muted">(en vivo)</span></span>
+              <span><b id="calDutyLive" style="color:var(--orange);font-size:17px">—</b><span class="muted"> · calibrado (±15%): </span><b id="calDutyFinal">—</b></span>
+            </div>
+            <button class="btn primary block" id="calRun" style="margin-top:8px">&#9654; Calibrar punto</button>
+            <button class="btn ghost block" id="calOnOff" style="margin-top:8px">&#9211; Encender continuo a este retardo</button>
+            <div style="display:flex;gap:7px;margin-top:8px">
+              <button class="btn ghost" id="calSweepBtn" style="flex:1.7">Calibración general (todas las velocidades)</button>
+              <button class="btn red" id="calCancel" style="flex:1;display:none">Cancelar</button>
+              <button class="btn ghost" id="calClear" style="flex:.7">Limpiar</button>
+            </div>
+            <div class="hint" id="calSweepMsg"></div>
+            <div style="display:flex;gap:7px;align-items:center;margin-top:10px">
+              <span style="font-size:12px;flex-shrink:0">Guardián de atasco</span>
+              <input type="number" id="atascoMs" class="numin" value="4000" min="500" step="500" style="flex:1"/>
+              <span class="muted" style="font-size:11px">ms</span>
+              <button class="btn ghost" id="atascoApply">Aplicar</button>
+            </div>
+            <div class="note">Tiempo sin pulsos hall antes de que el equipo corte por atasco. Con carga pesada o arranque lento, súbelo (p. ej. 8000 ms). Queda guardado en la tarjeta.</div>
+            <div style="display:flex;gap:7px;align-items:center;margin-top:10px">
+              <span style="font-size:12px;flex-shrink:0">Rearme anti-repetición</span>
+              <input type="number" id="rearmeMs" class="numin" value="5000" min="0" step="500" style="flex:1"/>
+              <span class="muted" style="font-size:11px">ms</span>
+              <button class="btn ghost" id="rearmeApply">Aplicar</button>
+            </div>
+            <div class="note">Tras cada ciclo, el equipo <b>ignora todo nuevo arranque</b> (pulsador incluido) durante este tiempo — evita aplicaciones falsas por ruido con la turbina a alta potencia. Queda guardado en la tarjeta; 0 lo desactiva (no recomendado).</div>
+            <div id="calResults" style="margin-top:8px"></div>
+            <div class="note">La calibración mueve <b>únicamente el motor dosificador</b> — turbina y tolva apagadas. <b>Arranca siempre al 90% de duty</b> (fuerza de sobra para despegar) y el lazo converge bajando hacia el duty real del retardo durante el tiempo de medición elegido. <b>Usar</b> aplica ese retardo como configuración de trabajo de la máquina.</div>
+          </div>
+
+          <div class="card">
+            <div style="font-weight:700;font-size:13px;margin-bottom:4px">Pérdida de manguera por seteo</div>
+            <div class="muted" style="font-size:11.5px">La pérdida en la manguera <b>depende de la turbina y del retardo</b>. Registra aquí la pérdida medida para cada combinación; Dosificar usará automáticamente la que corresponda al seteo activo.</div>
+            <div id="perdList" style="margin-top:8px"></div>
+            <div style="display:flex;gap:7px;align-items:flex-end;margin-top:8px">
+              <div style="flex:1.2"><div class="muted" style="font-size:10px;text-align:center;margin-bottom:3px">Turbina (m/s)</div><select class="numin" id="pdTurb" style="margin:0;text-align:left"></select></div>
+              <div style="flex:1.2"><div class="muted" style="font-size:10px;text-align:center;margin-bottom:3px">Retardo</div><select class="numin" id="pdRet" style="margin:0;text-align:left"></select></div>
+              <div style="flex:1"><div class="muted" style="font-size:10px;text-align:center;margin-bottom:3px">Pérdida %</div><input type="number" class="numin" id="pdPer" min="0" max="90" value="60" style="margin:0"/></div>
+              <button class="btn primary" id="pdSave" style="flex-shrink:0">Guardar</button>
+            </div>
+            <div class="note">La turbina del seteo se elige entre las <b>velocidades guardadas (m/s)</b> en la tarjeta de abajo. Para medir la pérdida: dosifica con ese seteo, pesa lo que sale al final de la manguera y calcula <code>pérdida = 100 × (1 − pesado/dosificado)</code>.</div>
+          </div>
+
+          <div class="card">
+            <div style="font-weight:700;font-size:13px;margin-bottom:4px">Velocidad de turbina (m/s)</div>
+            <div class="muted" style="font-size:11.5px">Registra la velocidad del aire medida (<b>5–30 m/s</b>) para cada potencia (duty) de la turbina y la <b>altura de palma</b> a la que aplica. La turbina llega al 100% — máx. recomendado <b>78%</b>. Dosificar muestra la velocidad del seteo activo.</div>
+            <div id="tvList" style="margin-top:8px"></div>
+            <div style="display:flex;gap:7px;align-items:flex-end;margin-top:8px">
+              <div style="flex:1"><div class="muted" style="font-size:10px;text-align:center;margin-bottom:3px">Turbina %</div><input type="number" class="numin" id="tvPct" min="0" max="100" value="60" style="margin:0"/></div>
+              <div style="flex:1"><div class="muted" style="font-size:10px;text-align:center;margin-bottom:3px">Velocidad m/s</div><input type="number" class="numin" id="tvMs" min="5" max="30" step="0.5" value="12" style="margin:0"/></div>
+              <div style="flex:1"><div class="muted" style="font-size:10px;text-align:center;margin-bottom:3px">Altura palma m</div><input type="number" class="numin" id="tvAlt" min="0" max="30" step="0.5" value="6" style="margin:0"/></div>
+              <button class="btn primary" id="tvSave" style="flex-shrink:0">Guardar</button>
+            </div>
+            <div class="note">Mide con anemómetro a la salida del ducto con la turbina a ese % sostenido (usa el slider de Pruebas o el ▶ de calibración). El lápiz ✎ carga la fila en los campos para editarla.</div>
+          </div>
+
+          <div class="card">
+            <div style="font-weight:700;font-size:13px;margin-bottom:4px">Piñones dosificadores</div>
+            <div class="muted" style="font-size:11.5px">Registra cada piñón con su <b>cantidad de cavidades</b> y los <b>gramos por cavidad</b> que carga. En Dosificar solo se elige el piñón instalado.</div>
+            <div id="pnList" style="margin-top:8px"></div>
+            <div style="display:flex;gap:7px;align-items:flex-end;margin-top:8px">
+              <div style="flex:1.2"><div class="muted" style="font-size:10px;text-align:center;margin-bottom:3px">Nombre</div><input type="text" class="numin" id="pnName" value="Piñón B" style="margin:0;text-align:left"/></div>
+              <div style="flex:1"><div class="muted" style="font-size:10px;text-align:center;margin-bottom:3px">Cavidades</div><input type="number" class="numin" id="pnCav" min="1" max="60" value="10" style="margin:0"/></div>
+              <div style="flex:1"><div class="muted" style="font-size:10px;text-align:center;margin-bottom:3px">g / cavidad</div><input type="number" class="numin" id="pnGcav" min="0.5" max="20" step="0.5" value="2" style="margin:0"/></div>
+              <button class="btn primary" id="pnSave" style="flex-shrink:0">Guardar</button>
+            </div>
+            <div class="note">Guardar con un nombre existente lo actualiza. El piñón activo se elige en Dosificar.</div>
+          </div>
+        </div>
+        <div class="tabbar" data-tabs></div>
+      </div>
+
+      <!-- PRUEBAS (solo Admin): la consola de ingeniería embebida -->
+      <div class="scrn" data-scrn="pruebas">
+        <div class="apphead"><div class="brand"><svg class="logo" viewBox="0 0 48 48"><rect x="8" y="14" width="26" height="26" rx="4" fill="#fff"/><rect x="10" y="16" width="22" height="22" rx="3" fill="#E8721C"/></svg><div><div class="co">ENVASES S.A.S</div><div class="pt">DOSAPALM V1</div></div></div><div class="scr-title">Pruebas · Admin</div></div>
+        <div class="body">
+          <div class="card">
+            <div class="row" style="margin-bottom:9px"><span style="font-weight:700;font-size:13px">Modo de operación</span><span class="chip" id="pModeChip"><span class="d"></span>—</span></div>
+            <div class="seg" id="pSeg"><div data-m="prueba">Prueba</div><div data-m="real">Real</div></div>
+          </div>
+
+          <div class="card">
+            <div style="font-weight:700;font-size:13px;margin-bottom:6px">Conexiones del equipo</div>
+            <div class="perif">
+              <div class="tog"><span>&#128266; Bluetooth</span><div class="sw" data-connsw="ble"></div></div>
+              <div class="tog"><span>&#128246; Wi-Fi</span><div class="sw" data-connsw="wifi"></div></div>
+              <div class="tog"><span>&#128268; USB (serial)</span><div class="sw on" style="opacity:.55;pointer-events:none" title="El puerto serial USB siempre queda disponible en la tarjeta"></div></div>
+            </div>
+            <div class="note">Bluetooth y Wi-Fi son <b>excluyentes</b> en la tarjeta: habilitar uno envía <code>conn ble|wifi</code> y deshabilita el otro (reconecta por el canal nuevo). El USB (cable serial) siempre queda disponible como respaldo y no se puede apagar.</div>
+          </div>
+
+          <div class="card">
+            <div style="font-weight:700;font-size:13px;margin-bottom:6px">Estado del sistema <span class="muted" style="font-weight:400;font-size:10.5px">en vivo desde el equipo</span></div>
+            <div class="sysleds">
+              <div class="sysled"><div class="g" id="syR"></div>Rojo</div>
+              <div class="sysled"><div class="g" id="syB"></div>Azul</div>
+              <div class="sysled"><div class="g" id="syG"></div>Verde</div>
+              <div class="sysled"><div class="g" id="syAux"></div>AUX</div>
+              <div class="sysled"><div class="g" id="syLd"></div>LD</div>
+            </div>
+            <div class="sysgrid">
+              <div class="sysbox"><div class="k">Turb</div><div class="v"><span id="syTurb">0</span>%</div><div class="pbar"><span id="syTurbB"></span></div></div>
+              <div class="sysbox"><div class="k">Dosf</div><div class="v"><span id="syDosf">0</span>%</div><div class="pbar"><span id="syDosfB" style="background:var(--green)"></span></div></div>
+              <div class="sysbox"><div class="k">Tol</div><div class="v"><span id="syTol">0</span>%</div><div class="pbar"><span id="syTolB" style="background:#2f6bd6"></span></div></div>
+            </div>
+            <div class="chips">
+              <span class="chip" id="syHall"><span class="d b"></span>Hall —</span>
+              <span class="chip" id="syBtn"><span class="d"></span>Btn libre</span>
+              <span class="chip" id="syGps"><span class="d"></span>GPS —</span>
+              <span class="chip" id="sySeq"><span class="d"></span>Seq —</span>
+            </div>
+          </div>
+
+          <div class="card">
+            <div style="font-weight:700;font-size:13px;margin-bottom:6px">Contador hall en tiempo real</div>
+            <div class="sysgrid">
+              <div class="sysbox"><div class="k">Pulsos</div><div class="v" id="hcPulses" style="color:var(--orange);font-size:22px">0</div></div>
+              <div class="sysbox"><div class="k">Gramos</div><div class="v" style="font-size:22px"><span id="hcGrams">0</span><span class="muted" style="font-size:11px"> g</span></div></div>
+              <div class="sysbox"><div class="k">Frecuencia</div><div class="v" style="font-size:22px"><span id="hcHz">0.0</span><span class="muted" style="font-size:11px"> Hz</span></div></div>
+            </div>
+            <div class="note">Cada pulso del sensor de efecto hall = una cavidad = 2 g.</div>
+            <button class="btn ghost block" data-pcmd="hall reset" style="margin-top:8px">Reiniciar contador</button>
+          </div>
+
+          <div class="card">
+            <div style="font-weight:700;font-size:13px;margin-bottom:4px">Retardo entre cavidades</div>
+            <div class="muted" style="font-size:11.5px">Tiempo entre una cavidad y la siguiente, medido por el sensor hall. El equipo ajusta la potencia del motor dosificador (PWM) para lograr esta cadencia.</div>
+            <div class="retsel" id="retSel"></div>
+            <div class="note">Seleccionado: <b id="retSelVal">100</b> ms/cavidad · se envía como <code>retardo &lt;ms&gt;</code></div>
+          </div>
+
+          <div class="card">
+            <div style="font-weight:700;font-size:13px;margin-bottom:10px">Motores <span class="muted" style="font-weight:400;font-size:11px">(turbina hasta 100% — máx. recomendado <b>78%</b> · dosificador mínimo 70%)</span></div>
+            <div class="motor"><div class="mhead"><span>Turbina <span class="muted" style="font-weight:400">(pin 32)</span></span><span class="v"><span id="pTurbV">0</span>%</span></div><div class="mrow"><input type="range" min="0" max="100" value="0" id="pTurb"/><button class="btn ghost" data-mtog="turb" style="min-width:56px">Máx</button></div></div>
+            <div class="motor"><div class="mhead"><span>Dosificador <span class="muted" style="font-weight:400">(pin 13)</span></span><span class="v"><span id="pDosfV">0</span>%</span></div><div class="mrow"><input type="range" min="0" max="100" value="0" id="pDosf"/><button class="btn ghost" data-mtog="dosf" style="min-width:56px">Máx</button></div></div>
+            <div class="motor"><div class="mhead"><span>Tolva <span class="muted" style="font-weight:400">(pin 15)</span></span><span class="v"><span id="pTolV">0</span>%</span></div><div class="mrow"><input type="range" min="0" max="100" value="0" id="pTol"/><button class="btn ghost" data-mtog="tol" style="min-width:56px">Máx</button></div></div>
+
+            <div class="fieldlabel">Frecuencia PWM por motor (Hz)</div>
+            <div style="display:flex;gap:7px">
+              <div style="flex:1"><div class="muted" style="font-size:10px;text-align:center;margin-bottom:3px">Turbina</div><select class="numin" id="fqTurb" style="text-align:left"></select></div>
+              <div style="flex:1"><div class="muted" style="font-size:10px;text-align:center;margin-bottom:3px">Dosificador</div><select class="numin" id="fqDosf" style="text-align:left"></select></div>
+              <div style="flex:1"><div class="muted" style="font-size:10px;text-align:center;margin-bottom:3px">Tolva</div><select class="numin" id="fqTol" style="text-align:left"></select></div>
+            </div>
+            <button class="btn ghost block" id="fqApply" style="margin-top:8px">Aplicar frecuencias al equipo</button>
+            <div class="note">La frecuencia del PWM cambia el tono/torque del motor. Aplica igual a las pruebas y a la dosificación real, y queda guardada en la tarjeta.</div>
+          </div>
+
+          <div class="card">
+            <div style="font-weight:700;font-size:13px;margin-bottom:10px">LEDs y salidas</div>
+            <div class="perif">
+              <div class="tog"><span style="color:var(--red)">&#9679; <span style="color:var(--ink)">LED Rojo</span></span><div class="sw" data-led="r"></div></div>
+              <div class="tog"><span style="color:var(--blue)">&#9679; <span style="color:var(--ink)">LED Azul</span></span><div class="sw" data-led="b"></div></div>
+              <div class="tog"><span style="color:var(--green)">&#9679; <span style="color:var(--ink)">LED Verde</span></span><div class="sw" data-led="g"></div></div>
+              <div class="tog"><span>&#9679; LED todos</span><div class="sw" data-led="all"></div></div>
+              <div class="tog"><span>&#9094; AUX <span class="muted">(pin 25)</span></span><div class="sw" data-out="aux"></div></div>
+              <div class="tog"><span>&#9094; LD <span class="muted">(pin 19)</span></span><div class="sw" data-out="ld"></div></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div style="font-weight:700;font-size:13px;margin-bottom:10px">Secuencias rápidas</div>
+            <div class="acts">
+              <button class="btn primary" data-pcmd="ciclo">Ciclo</button>
+              <button class="btn ghost" data-pcmd="test leds">Test LEDs</button>
+              <button class="btn ghost" data-pcmd="test motors">Test motores</button>
+              <button class="btn ghost" data-pcmd="ident">Ident</button>
+              <button class="btn ghost" data-pcmd="status">Status</button>
+              <button class="btn ghost" data-pcmd="hall reset">Reset hall</button>
+              <button class="btn red" data-pcmd="safe">SAFE</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div style="font-weight:700;font-size:13px;margin-bottom:2px">Constructor de ciclos</div>
+            <div class="muted" style="font-size:11px;margin-bottom:10px">Cada paso mantiene ese motor a la potencia indicada durante su tiempo; <b>al terminar, todos los motores se apagan solos</b>. Para apagar uno a mitad del ciclo, agrega un paso con 0%.</div>
+            <div id="stepList"></div>
+            <div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:4px">
+              <button class="btn ghost" id="addStep">+ Paso</button>
+              <button class="btn primary" id="runSeq" style="flex:1">&#9654; Ejecutar</button>
+            </div>
+            <div style="display:flex;gap:7px;margin-top:8px">
+              <input id="seqName" placeholder="nombre del ciclo" style="flex:1;border:1px solid #d7dce4;border-radius:9px;padding:9px 10px;font-size:13px"/>
+              <button class="btn ghost" id="saveSeq">Guardar</button>
+            </div>
+            <div class="seqbadges" id="savedSeqs"></div>
+          </div>
+
+          <div class="card">
+            <div style="font-weight:700;font-size:13px;margin-bottom:8px">GPS del equipo</div>
+            <div class="acts">
+              <button class="btn ghost" data-pcmd="gps">Posición</button>
+              <button class="btn ghost" data-pcmd="gps maps">Link Maps</button>
+              <button class="btn ghost" data-pcmd="gps sats">Satélites</button>
+              <button class="btn ghost" data-pcmd="gps raw 5">NMEA 5s</button>
+            </div>
+            <div class="note">La respuesta aparece en el terminal de abajo y actualiza el chip de GPS.</div>
+          </div>
+
+          <div class="card">
+            <div style="font-weight:700;font-size:13px;margin-bottom:2px">Mensajes periódicos (MON)</div>
+            <div class="muted" style="font-size:11px;margin-bottom:10px">Estado que el equipo envía cada X segundos.</div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <div class="sw on" id="monSw" title="Activar/desactivar"></div>
+              <span style="font-size:12.5px">Intervalo</span>
+              <input type="number" id="monSeg" value="5" min="1" style="width:70px;border:1px solid #d7dce4;border-radius:9px;padding:9px;font-size:14px;font-weight:700;text-align:center"/>
+              <span class="muted" style="font-size:11px">seg</span>
+              <button class="btn ghost" id="monApply">Aplicar</button>
+            </div>
+            <div class="retsel" id="monVars"></div>
+          </div>
+
+          <div class="card">
+            <div class="row" style="margin-bottom:8px"><span style="font-weight:700;font-size:13px">Logs y comando serial</span><div class="sw on" id="termSw" title="Habilitar o deshabilitar los logs y el comando serial"></div></div>
+            <div class="cmdrow" id="cmdRow"><input id="pCmd" placeholder="ej. seq run T40:2500,D60:4000,T0:0" autocomplete="off" autocapitalize="off" spellcheck="false"/><button class="btn primary" id="pCmdSend">Enviar</button></div>
+            <div class="note">Los logs en vivo del equipo aparecen en la ventana negra de abajo (solo en esta vista). El interruptor los habilita o deshabilita junto con el comando serial.</div>
+          </div>
+        </div>
+        <div class="tabbar" data-tabs></div>
+      </div>
+
+      <!-- PERFIL: cambio de contraseñas y cierre de sesión -->
+      <div class="scrn" data-scrn="perfil">
+        <div class="apphead"><div class="brand"><svg class="logo" viewBox="0 0 48 48"><rect x="8" y="14" width="26" height="26" rx="4" fill="#fff"/><rect x="10" y="16" width="22" height="22" rx="3" fill="#E8721C"/></svg><div><div class="co">ENVASES S.A.S</div><div class="pt">DOSAPALM V1</div></div></div><div class="scr-title">Configuración de perfil</div></div>
+        <div class="body">
+          <div class="card"><div class="row"><div><div style="font-weight:700" id="pfName">—</div><div class="muted" style="font-size:11.5px">Perfil activo en este dispositivo</div></div><div style="font-size:20px" id="pfIcon">&#128100;</div></div></div>
+
+          <div class="card">
+            <div style="font-weight:700;font-size:13px;margin-bottom:8px">Cambiar mi contraseña</div>
+            <div class="fieldlabel">Contraseña actual</div>
+            <input type="password" class="pwin" id="pwCur" autocomplete="current-password"/>
+            <div class="fieldlabel">Nueva contraseña (mín. 4 caracteres)</div>
+            <input type="password" class="pwin" id="pwNew" autocomplete="new-password"/>
+            <div class="fieldlabel">Repetir nueva contraseña</div>
+            <input type="password" class="pwin" id="pwNew2" autocomplete="new-password"/>
+            <div class="warnbox" id="pwErr" style="display:none"></div>
+            <button class="btn primary block" id="btnPwSave" style="margin-top:12px">Guardar contraseña</button>
+          </div>
+
+          <!-- Solo Admin: gestiona la contraseña del Operador -->
+          <div class="card" id="pwOperCard" style="display:none">
+            <div style="font-weight:700;font-size:13px;margin-bottom:2px">Contraseña del Operador</div>
+            <div class="muted" style="font-size:11.5px;margin-bottom:8px">Como Administrador puedes restablecerla sin conocer la actual.</div>
+            <div class="fieldlabel">Nueva contraseña del Operador</div>
+            <input type="password" class="pwin" id="pwOperNew" autocomplete="new-password"/>
+            <div class="warnbox" id="pwOperErr" style="display:none"></div>
+            <button class="btn ghost block" id="btnPwOperSave" style="margin-top:12px">Restablecer contraseña del Operador</button>
+          </div>
+
+          <button class="btn red block" id="btnLogout" style="margin-top:4px">Cerrar sesión</button>
+          <div class="note" style="text-align:center">Las contraseñas se guardan en este dispositivo (almacenamiento local del navegador).</div>
+        </div>
+        <div class="tabbar" data-tabs></div>
+      </div>
+
+      <!-- logs en vivo: SOLO en la vista Pruebas y con el interruptor habilitado -->
+      <div class="body" id="termWrap" style="flex:0 0 auto;padding-top:0"><div class="term" id="term"></div></div>
+    </div></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+var DosapalmProtocol = (() => {
+  var __defProp = Object.defineProperty;
+  var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+  var __getOwnPropNames = Object.getOwnPropertyNames;
+  var __hasOwnProp = Object.prototype.hasOwnProperty;
+  var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+  var __export = (target, all) => {
+    for (var name in all)
+      __defProp(target, name, { get: all[name], enumerable: true });
+  };
+  var __copyProps = (to, from, except, desc) => {
+    if (from && typeof from === "object" || typeof from === "function") {
+      for (let key of __getOwnPropNames(from))
+        if (!__hasOwnProp.call(to, key) && key !== except)
+          __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+    }
+    return to;
+  };
+  var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+  var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
+
+  // src/protocol.ts
+  var protocol_exports = {};
+  __export(protocol_exports, {
+    ACCESS_KEY: () => ACCESS_KEY,
+    AP_PASS: () => AP_PASS,
+    DOSF_PCT_MIN: () => DOSF_PCT_MIN,
+    DoseTracker: () => DoseTracker,
+    GRAMS_PER_PULSE: () => GRAMS_PER_PULSE,
+    LineAssembler: () => LineAssembler,
+    TCP_PORT: () => TCP_PORT,
+    TURB_DUTY_MAX: () => TURB_DUTY_MAX,
+    TURB_PCT_RECOMMENDED: () => TURB_PCT_RECOMMENDED,
+    WS_PORT: () => WS_PORT,
+    cmd: () => cmd,
+    encodeSeq: () => encodeSeq,
+    initialState: () => initialState,
+    parseLine: () => parseLine,
+    realDose: () => realDose,
+    reduce: () => reduce,
+    stripTimestamp: () => stripTimestamp,
+    turbDuty: () => turbDuty
+  });
+  var GRAMS_PER_PULSE = 2;
+  var TURB_DUTY_MAX = 255;
+  var TURB_PCT_RECOMMENDED = 78;
+  var DOSF_PCT_MIN = 70;
+  var WS_PORT = 81;
+  var TCP_PORT = 3333;
+  var AP_PASS = "dosapalm2026";
+  var ACCESS_KEY = "1234";
+  var MOTOR_LETTER = { turb: "T", dosf: "D", tol: "O" };
+  function encodeSeq(steps) {
+    return steps.map((s) => `${MOTOR_LETTER[s.motor]}${s.pct}:${s.ms}`).join(",");
+  }
+  var cmd = {
+    clave: (key = ACCESS_KEY) => `clave ${key}`,
+    /** v8.2: la tarjeta responde `VERSION <n>` — la app verifica compatibilidad. */
+    version: () => "version",
+    help: () => "help",
+    status: () => "status",
+    red: () => "red",
+    safe: () => "safe",
+    reset: () => "reset",
+    conn: (c) => `conn ${c}`,
+    modo: (m) => `modo ${m}`,
+    motor: (m, pct) => `${m} ${pct <= 0 ? "off" : Math.round(pct)}`,
+    led: (which, on) => `led ${which} ${on ? "on" : "off"}`,
+    aux: (on) => `aux ${on ? "on" : "off"}`,
+    ld: (on) => `ld ${on ? "on" : "off"}`,
+    // Configuración de dosificación (modo real)
+    dosis: (g) => `dosis ${Math.max(0, Math.round(g))}`,
+    retardo: (ms) => `retardo ${Math.max(0, Math.round(ms))}`,
+    /**
+     * v8.8: PWM CONSTANTE del dosificador durante la dosificación (persistente).
+     * Viene de la tabla de calibración: 0 = lazo de control; >0 se acota al piso
+     * operativo (DOSF_PCT_MIN)–100 y la aplicación corre a ese duty sin variar.
+     */
+    dutyFijo: (pct) => `dutyfijo ${pct <= 0 ? 0 : Math.min(100, Math.max(DOSF_PCT_MIN, Math.round(pct)))}`,
+    /** v8.3: timeout del guardián de atasco (persistente en el equipo). */
+    atasco: (ms) => `atasco ${Math.max(500, Math.round(ms))}`,
+    /**
+     * v9.1: ventana ANTI-REPETICIÓN tras cada ciclo (persistente; 0 = sin
+     * bloqueo). Con la turbina a tope, el ruido puede relanzar ciclos falsos.
+     */
+    rearme: (ms) => `rearme ${Math.max(0, Math.round(ms))}`,
+    /** v8.4: frecuencia PWM por motor (100–40000 Hz, persistente en el equipo). */
+    freq: (motor, hz) => `freq ${motor} ${Math.min(4e4, Math.max(100, Math.round(hz)))}`,
+    tini: (ms) => `tini ${Math.max(0, Math.round(ms))}`,
+    tfin: (ms) => `tfin ${Math.max(0, Math.round(ms))}`,
+    dosificar: () => "dosificar",
+    /** v8: mide la cadencia con el dosificador SOLO (turbina y tolva apagadas). */
+    calibrar: (ms, pulses = 5) => `calibrar ${Math.max(0, Math.round(ms))} ${Math.max(2, Math.round(pulses))}`,
+    /** v8: modo CONTINUO — gira indefinido a ese retardo; se apaga con `parar`. */
+    calibrarOn: (ms) => `calibrar ${Math.max(0, Math.round(ms))} 0`,
+    parar: () => "parar",
+    ciclo: () => "ciclo",
+    seqRun: (steps) => `seq run ${encodeSeq(steps)}`,
+    mon: (on) => `mon ${on ? "on" : "off"}`,
+    monSet: (seconds) => `mon set ${Math.max(1, Math.round(seconds))}`,
+    monVars: (vars) => `mon vars ${vars.join(",")}`,
+    hall: () => "hall",
+    hallReset: () => "hall reset",
+    // v8/P0-1: eventos persistidos en el equipo
+    evtCount: () => "evt count",
+    evtSince: (seq) => `evt since ${Math.max(0, Math.round(seq))}`,
+    evtAck: (seq) => `evt ack ${Math.max(0, Math.round(seq))}`,
+    gps: (sub) => sub ? `gps ${sub}` : "gps",
+    log: (on) => `log ${on ? "on" : "off"}`,
+    serialGet: () => "serial ver",
+    serialSet: (s) => `serial set ${s}`,
+    test: (what) => `test ${what}`,
+    ident: () => "ident"
+  };
+  function realDose(requestedGrams) {
+    const pulses = Math.round(requestedGrams / GRAMS_PER_PULSE);
+    return { pulses, grams: pulses * GRAMS_PER_PULSE };
+  }
+  function turbDuty(pct) {
+    const clamped = Math.min(100, Math.max(0, pct));
+    return Math.min(Math.round(clamped / 100 * 255), TURB_DUTY_MAX);
+  }
+  function stripTimestamp(line) {
+    const m = /^\[(\d+)\]\s?(.*)$/.exec(line);
+    if (!m) return { ms: null, body: line };
+    return { ms: Number(m[1]), body: m[2] ?? "" };
+  }
+  function parseLine(raw) {
+    const line = raw.replace(/[\r\n]+$/, "");
+    if (line.startsWith("[MON]")) return { t: "mon", state: parseMon(line) };
+    if (line.startsWith("LOG,")) {
+      const row = parseCsv(line);
+      if (row) return { t: "csv", row };
+      return { t: "other", text: line };
+    }
+    if (line.startsWith("EVT,")) {
+      const evt = parseEvt(line);
+      if (evt) return { t: "evt", evt };
+      return { t: "other", text: line };
+    }
+    let em;
+    if (em = /^EVT COUNT (\d+)/.exec(line)) return { t: "evtCount", pending: Number(em[1]) };
+    if (em = /^EVT END (\d+)/.exec(line)) return { t: "evtEnd", sent: Number(em[1]) };
+    if (em = /^VERSION (\S+)/.exec(line)) return { t: "version", version: em[1] };
+    const { body } = stripTimestamp(line);
+    let m;
+    if (/^MODO PRUEBA activo/.test(body)) return { t: "mode", mode: "PRUEBA" };
+    if (/^MODO REAL activo/.test(body)) return { t: "mode", mode: "REAL" };
+    if (/MODO CONFIGURACION/.test(body)) return { t: "mode", mode: "CONFIG" };
+    if (m = /^TURB objetivo=(\d+)%/.exec(body)) return { t: "turb", pct: Number(m[1]) };
+    if (m = /^DOSF=(\d+)%/.exec(body)) return { t: "dosf", pct: Number(m[1]) };
+    if (m = /^TOL=(\d+)%/.exec(body)) return { t: "tol", pct: Number(m[1]) };
+    if (m = /^LED (r|g|b|all) (on|off)/.exec(body)) {
+      return { t: "led", which: m[1], on: m[2] === "on" };
+    }
+    if (m = /^AUX (on|off)/i.exec(body)) return { t: "aux", on: /on/i.test(m[1]) };
+    if (m = /^LD (on|off)/i.exec(body)) return { t: "ld", on: /on/i.test(m[1]) };
+    if (/^SAFE:/.test(body)) return { t: "safe" };
+    if (m = /^SEQ (\S+) inicio/.exec(body)) return { t: "seq", name: m[1], state: "inicio" };
+    if (m = /^SEQ (\S+) (completada|abortada)/.exec(body)) {
+      return { t: "seq", name: m[1], state: "fin" };
+    }
+    if (m = /^EVENTO: hall pulso #(\d+).*total (\d+) g/.exec(body)) {
+      return { t: "hall", pulse: Number(m[1]), totalGrams: Number(m[2]) };
+    }
+    if (/^Hall reseteado/.test(body)) return { t: "hallReset" };
+    if (/^EVENTO: pulsador PRESIONADO/.test(body)) return { t: "button", state: "press" };
+    if (m = /^EVENTO: pulsador liberado \((\d+) ms\)/.exec(body)) {
+      return { t: "button", state: "release", ms: Number(m[1]) };
+    }
+    if (/^EVENTO: pulsador sostenido/.test(body)) return { t: "button", state: "hold" };
+    if (/^EVENTO: GPS fix ADQUIRIDO/.test(body)) return { t: "gpsFix", fix: true };
+    if (/^EVENTO: GPS fix PERDIDO/.test(body)) return { t: "gpsFix", fix: false };
+    if (m = /^\s*Fix: SI \| Lat: (-?[\d.]+) \| Lng: (-?[\d.]+)/.exec(line)) {
+      return { t: "gpsPos", fix: true, lat: Number(m[1]), lon: Number(m[2]) };
+    }
+    if (/^\s*Fix: NO/.test(line)) return { t: "gpsPos", fix: false, lat: null, lon: null };
+    if ((m = /^\s*Sat[eé]lites?: (\d+)/.exec(line)) || (m = /^\s*Sats: (\d+)/.exec(line))) {
+      return { t: "gpsSats", sats: Number(m[1]) };
+    }
+    if (m = /^DOSIFICAR: dosis (\d+) g \((\d+) pulsos[^)]*\)(?:.*?turbina (\d+)%)?(?:.*?warmup (\d+)ms)?/.exec(body)) {
+      return {
+        t: "doseStart",
+        requestedGrams: Number(m[1]),
+        pulses: Number(m[2]),
+        turbPct: m[3] ? Number(m[3]) : 0,
+        warmupMs: m[4] ? Number(m[4]) : 0
+      };
+    }
+    if (m = /^DOSIFICAR: dosificando \(retardo cav (\d+)ms\)/.exec(body)) {
+      return { t: "doseDosing", retardoMs: Number(m[1]) };
+    }
+    if (m = /^DOSIFICAR: dosis alcanzada, limpieza turbina (\d+)ms/.exec(body)) {
+      return { t: "doseCleaning", cleanMs: Number(m[1]) };
+    }
+    if (m = /^DOSIFICAR: completado\. Total (\d+) g/.exec(body)) {
+      return { t: "doseDone", grams: Number(m[1]) };
+    }
+    if (m = /^CALIBRAR: retardo (\d+) ms \((?:(\d+) pulsos|continuo)\)/.exec(body)) {
+      return { t: "calStart", retardoMs: Number(m[1]), pulses: m[2] ? Number(m[2]) : 0 };
+    }
+    if (m = /^CALIBRAR: completado \((\d+) pulsos\)(?:.*?duty final (\d+)%(?: \((\d+) validas\))?)?/.exec(body)) {
+      return {
+        t: "calDone",
+        pulses: Number(m[1]),
+        dutyPct: m[2] ? Number(m[2]) : null,
+        valid: m[3] ? Number(m[3]) : null
+      };
+    }
+    if (/^CALIBRAR: detenido/.test(body)) return { t: "calStopped" };
+    if (m = /^CTRL: duty (\d+)% \((\d+)\/255\) \| (?:intervalo (\d+) ms|arranque|gpio)/.exec(body)) {
+      return { t: "ctrl", dutyPct: Number(m[1]), duty: Number(m[2]), intervalMs: m[3] ? Number(m[3]) : 0 };
+    }
+    if (/^PARAR:/.test(body)) return { t: "doseStopped" };
+    if (/SENSOR HALL NO DETECTADO/.test(body)) {
+      return { t: "fault", code: "HALL_SENSOR", message: body };
+    }
+    if (/ATASCO/.test(body)) return { t: "fault", code: "JAM", message: body };
+    return { t: "other", text: line };
+  }
+  function parseMon(line) {
+    const s = {};
+    let m;
+    if (m = /modo=(\w+)/.exec(line)) s.mode = m[1];
+    if (m = /TURB (\d+)%/.exec(line)) s.turb = Number(m[1]);
+    if (m = /DOSF (\d+)%/.exec(line)) s.dosf = Number(m[1]);
+    if (m = /TOL (\d+)%/.exec(line)) s.tol = Number(m[1]);
+    if (m = /hall (\d+) \(([\d.]+) Hz, (\d+) g\)/.exec(line)) {
+      s.hall = Number(m[1]);
+      s.hallHz = Number(m[2]);
+      s.grams = Number(m[3]);
+    }
+    if (/btn PRES/.test(line)) s.btnPressed = true;
+    else if (/btn libre/.test(line)) s.btnPressed = false;
+    if (m = /GPS (FIX|sin-fix) sats=(\d+)/.exec(line)) {
+      s.gpsFix = m[1] === "FIX";
+      s.sats = Number(m[2]);
+    }
+    if (m = /BT (ON|-)/.exec(line)) s.ble = m[1] === "ON";
+    if (m = /TCP (ON|-)/.exec(line)) s.tcp = m[1] === "ON";
+    if (m = /seq=([\w-]+)/.exec(line)) s.seq = m[1] === "-" ? null : m[1];
+    return s;
+  }
+  function parseEvt(line) {
+    const p = line.split(",");
+    if (p.length < 13 || Number.isNaN(Number(p[1]))) return null;
+    const fix = p[5] === "1";
+    const result = p[12] === "partial" || p[12] === "error" ? p[12] : "ok";
+    return {
+      seq: Number(p[1]),
+      ts_ms: Number(p[2]),
+      grams: Number(p[3]),
+      pulses: Number(p[4]),
+      fix,
+      // sin fix el firmware manda el último punto conocido (o 0,0 si nunca hubo)
+      lat: Number(p[6]) !== 0 ? Number(p[6]) : fix ? Number(p[6]) : null,
+      lon: Number(p[7]) !== 0 ? Number(p[7]) : fix ? Number(p[7]) : null,
+      turb_pct: Number(p[8]),
+      tini_ms: Number(p[9]),
+      tfin_ms: Number(p[10]),
+      retardo_ms: Number(p[11]),
+      result
+    };
+  }
+  function parseCsv(line) {
+    const p = line.split(",");
+    if (p.length < 13 || Number.isNaN(Number(p[1]))) return null;
+    const lat = Number(p[10]);
+    const lon = Number(p[11]);
+    const fix = p[8] === "1";
+    return {
+      ms: Number(p[1]),
+      turb: Number(p[2]),
+      dosf: Number(p[3]),
+      tol: Number(p[4]),
+      hall: Number(p[5]),
+      hallHz: Number(p[6]),
+      btn: p[7] === "1",
+      fix,
+      sats: Number(p[9]),
+      lat: fix ? lat : null,
+      lon: fix ? lon : null,
+      hdop: Number(p[12])
+    };
+  }
+  function initialState() {
+    return {
+      mode: "NONE",
+      turb: 0,
+      dosf: 0,
+      tol: 0,
+      ledR: false,
+      ledG: false,
+      ledB: false,
+      aux: false,
+      ld: false,
+      hall: 0,
+      hallHz: 0,
+      grams: 0,
+      btnPressed: false,
+      gpsFix: false,
+      sats: 0,
+      lat: null,
+      lon: null,
+      lastKnownLat: null,
+      lastKnownLon: null,
+      seq: null,
+      ble: false,
+      tcp: false,
+      dose: "idle",
+      fault: null,
+      ctrlDutyPct: null,
+      fwVersion: null
+    };
+  }
+  function reduce(prev, p) {
+    const s = { ...prev };
+    switch (p.t) {
+      case "mode":
+        s.mode = p.mode;
+        break;
+      case "turb":
+        s.turb = p.pct;
+        break;
+      case "dosf":
+        s.dosf = p.pct;
+        break;
+      case "tol":
+        s.tol = p.pct;
+        break;
+      case "led":
+        if (p.which === "r" || p.which === "all") s.ledR = p.on;
+        if (p.which === "g" || p.which === "all") s.ledG = p.on;
+        if (p.which === "b" || p.which === "all") s.ledB = p.on;
+        break;
+      case "aux":
+        s.aux = p.on;
+        break;
+      case "ld":
+        s.ld = p.on;
+        break;
+      case "safe":
+        s.turb = s.dosf = s.tol = 0;
+        s.ledR = s.ledG = s.ledB = false;
+        s.aux = s.ld = false;
+        s.seq = null;
+        s.dose = "idle";
+        break;
+      case "seq":
+        s.seq = p.state === "inicio" ? p.name : null;
+        break;
+      case "hall":
+        s.hall = p.pulse;
+        s.grams = p.totalGrams;
+        break;
+      case "hallReset":
+        s.hall = 0;
+        s.grams = 0;
+        break;
+      case "button":
+        s.btnPressed = p.state === "press";
+        break;
+      case "gpsFix":
+        s.gpsFix = p.fix;
+        if (!p.fix) {
+          s.lat = null;
+          s.lon = null;
+        }
+        break;
+      case "gpsPos":
+        s.gpsFix = p.fix;
+        if (p.fix && p.lat !== null && p.lon !== null) {
+          s.lat = p.lat;
+          s.lon = p.lon;
+          s.lastKnownLat = p.lat;
+          s.lastKnownLon = p.lon;
+        } else {
+          s.lat = null;
+          s.lon = null;
+        }
+        break;
+      case "gpsSats":
+        s.sats = p.sats;
+        break;
+      case "doseStart":
+        s.dose = "warmup";
+        s.seq = "DOSIFICAR";
+        s.fault = null;
+        break;
+      case "doseDosing":
+        s.dose = "dosing";
+        break;
+      case "doseCleaning":
+        s.dose = "cleaning";
+        break;
+      case "doseDone":
+      case "doseStopped":
+        s.dose = "idle";
+        s.seq = null;
+        break;
+      case "fault":
+        s.fault = { code: p.code, message: p.message };
+        s.dose = "idle";
+        break;
+      case "ctrl":
+        s.ctrlDutyPct = p.dutyPct;
+        break;
+      case "version":
+        s.fwVersion = p.version;
+        break;
+      case "mon": {
+        const m = p.state;
+        if (m.mode) s.mode = m.mode;
+        if (m.turb !== void 0) s.turb = m.turb;
+        if (m.dosf !== void 0) s.dosf = m.dosf;
+        if (m.tol !== void 0) s.tol = m.tol;
+        if (m.hall !== void 0) s.hall = m.hall;
+        if (m.hallHz !== void 0) s.hallHz = m.hallHz;
+        if (m.grams !== void 0) s.grams = m.grams;
+        if (m.btnPressed !== void 0) s.btnPressed = m.btnPressed;
+        if (m.gpsFix !== void 0) {
+          s.gpsFix = m.gpsFix;
+          if (!m.gpsFix) {
+            s.lat = null;
+            s.lon = null;
+          }
+        }
+        if (m.sats !== void 0) s.sats = m.sats;
+        if (m.ble !== void 0) s.ble = m.ble;
+        if (m.tcp !== void 0) s.tcp = m.tcp;
+        if (m.seq !== void 0) s.seq = m.seq;
+        break;
+      }
+      case "csv": {
+        const r = p.row;
+        s.turb = r.turb;
+        s.dosf = r.dosf;
+        s.tol = r.tol;
+        s.hall = r.hall;
+        s.hallHz = r.hallHz;
+        s.btnPressed = r.btn;
+        s.gpsFix = r.fix;
+        s.sats = r.sats;
+        if (r.fix && r.lat !== null && r.lon !== null) {
+          s.lat = r.lat;
+          s.lon = r.lon;
+          s.lastKnownLat = r.lat;
+          s.lastKnownLon = r.lon;
+        } else {
+          s.lat = null;
+          s.lon = null;
+        }
+        break;
+      }
+      default:
+        break;
+    }
+    return s;
+  }
+  var DoseTracker = class {
+    constructor(ctx) {
+      this.ctx = ctx;
+      __publicField(this, "seqCounter", 0);
+      __publicField(this, "open", null);
+    }
+    now() {
+      return this.ctx.now ? this.ctx.now() : /* @__PURE__ */ new Date();
+    }
+    nextId() {
+      if (this.ctx.newId) return this.ctx.newId();
+      return globalThis.crypto.randomUUID();
+    }
+    get inProgress() {
+      return this.open !== null;
+    }
+    /**
+     * Alimenta una línea parseada junto con el estado ANTERIOR a reducirla (para
+     * conocer el conteo hall en el instante de arranque).
+     */
+    feed(p, state) {
+      switch (p.t) {
+        case "doseStart":
+          this.open = {
+            requestedGrams: p.requestedGrams,
+            targetPulses: p.pulses,
+            turbPct: p.turbPct,
+            warmupMs: p.warmupMs,
+            retardoMs: 0,
+            cleanMs: 0,
+            hallAtStart: state.hall,
+            startedAt: this.now()
+          };
+          return null;
+        case "doseDosing":
+          if (this.open) this.open.retardoMs = p.retardoMs;
+          return null;
+        case "doseCleaning":
+          if (this.open) this.open.cleanMs = p.cleanMs;
+          return null;
+        case "doseDone":
+          return this.close(state, p.grams, "ok");
+        case "doseStopped":
+          if (!this.open) return null;
+          return this.close(state, (state.hall - this.open.hallAtStart) * GRAMS_PER_PULSE, "partial");
+        case "fault":
+          if (!this.open) return null;
+          return this.close(state, (state.hall - this.open.hallAtStart) * GRAMS_PER_PULSE, "error");
+        default:
+          return null;
+      }
+    }
+    close(state, grams, result) {
+      const o = this.open;
+      this.open = null;
+      this.seqCounter += 1;
+      const hasFix = state.gpsFix && state.lat !== null && state.lon !== null;
+      return {
+        id: this.nextId(),
+        device_serial: this.ctx.device_serial,
+        session_id: this.ctx.session_id,
+        operator_id: this.ctx.operator_id,
+        ts_device: this.now().toISOString(),
+        seq: this.seqCounter,
+        gps_available: hasFix,
+        lat: hasFix ? state.lat : null,
+        lon: hasFix ? state.lon : null,
+        last_known_lat: hasFix ? null : state.lastKnownLat,
+        last_known_lon: hasFix ? null : state.lastKnownLon,
+        grams,
+        requested_grams: o.requestedGrams,
+        hall_steps: Math.max(0, state.hall - o.hallAtStart),
+        cycle: {
+          turb_pct: o.turbPct,
+          tini_ms: o.warmupMs,
+          tfin_ms: o.cleanMs,
+          retardo_ms: o.retardoMs
+        },
+        fw_version: this.ctx.fw_version ?? "v7",
+        result
+      };
+    }
+  };
+  var LineAssembler = class {
+    constructor() {
+      __publicField(this, "buf", "");
+    }
+    push(chunk) {
+      this.buf += chunk;
+      const lines = [];
+      let i;
+      while ((i = this.buf.search(/[\r\n]/)) >= 0) {
+        const line = this.buf.slice(0, i);
+        this.buf = this.buf.slice(i + 1);
+        if (line.length > 0) lines.push(line);
+      }
+      return lines;
+    }
+  };
+  return __toCommonJS(protocol_exports);
+})();
+</script>
+<script>
+"use strict";
+(function(){
+const { cmd, LineAssembler, parseLine, reduce, initialState, DoseTracker, realDose, encodeSeq, stripTimestamp, DOSF_PCT_MIN } = window.DosapalmProtocol
+
+// Calibración del retardo: timestamps [ms del equipo] de los últimos pulsos hall.
+// El intervalo entre pulsos consecutivos es la cadencia real de las cavidades.
+const hallCal = []
+
+const NUS='6e400001-b5a3-f393-e0a9-e50e24dcca9e', NUS_RX='6e400002-b5a3-f393-e0a9-e50e24dcca9e', NUS_TX='6e400003-b5a3-f393-e0a9-e50e24dcca9e'
+
+const $ = (id) => document.getElementById(id)
+let ws = null
+let bleRx = null, bleDev = null
+let transport = 'none'   // 'ws' | 'ble' | 'none'
+const asm = new LineAssembler()
+let state = initialState()
+let tracker = null
+let profile = 'operador'
+
+const session = { active:false, applications:0, grams:0, gramsReal:0, events:[], startedAt:null }
+// retardo: intervalo objetivo entre cavidades (pulsos hall), ms. Presets tomados del
+// selector de la app original (decía "SEGUNDOS" pero siempre fueron milisegundos).
+// 0 = sin control: el dosificador gira a su velocidad configurada.
+const RETARDOS = [0,100,200,250,300,400,500,600,700]
+// perdida: % que se pierde en la manguera (medido en campo: 50–60%). La dosis
+// que fija el usuario es la FINAL (salida de la manguera); la máquina dosifica
+// dosis/(1-perdida) para compensar.
+const dose = { dosis:15, turb:40, tini:2500, tfin:3500, retardo:100, perdida:60, gcav:2 }
+function perdidaPct(){ return Math.min(90, Math.max(0, Number(dose.perdida)||0)) }
+// gramos que debe dosificar la MÁQUINA para que llegue dose.dosis al final
+function dosisMaquina(){ return dose.dosis<=0 ? 0 : Math.round(dose.dosis/(1-perdidaPct()/100)) }
+// Parámetros de la rueda: cavidades necesarias según los gramos por cavidad
+// DEL PIÑÓN ACTIVO (configurado en Pruebas, elegido en Dosificar).
+function gcavG(){ const p=pinonActivo(); return Math.max(0.5, Number(p && p.gcav)||2) }
+function pulsosNecesarios(){ return Math.max(0, Math.round(dosisMaquina()/gcavG())) }
+// El firmware cuenta 2 g por pulso hall: se le pide la dosis que produce
+// EXACTAMENTE las cavidades calculadas (N×2), y los gramos reales son N×gcav.
+function dosisComando(){ return pulsosNecesarios()*2 }
+
+// ---------- pérdidas calibradas por seteo (turbina % + retardo ms) ----------
+// La pérdida de la manguera VARÍA con la turbina y el retardo. Se calibran en
+// Pruebas y Dosificar aplica automáticamente la del seteo activo.
+// Medición de campo precargada: turbina 60% · 500 ms → 60% de pérdida.
+let perdidas = [{ turb:60, ret:500, per:60 }]
+try{ const s=JSON.parse(localStorage.getItem('dp_perdidas')||'null'); if(Array.isArray(s)) perdidas=s }catch(e){}
+function savePerdidas(){ try{ localStorage.setItem('dp_perdidas', JSON.stringify(perdidas)) }catch(e){} }
+function perdidaCalibrada(){ return perdidas.find(e=> e.turb===dose.turb && e.ret===dose.retardo) || null }
+// Piñones dosificadores: cada uno con cantidad de cavidades y g por cavidad.
+// Se configuran en Pruebas; en Dosificar solo se elige el instalado.
+let pinones = [{ name:'Piñón A', cav:10, gcav:2 }]
+try{ const s3=JSON.parse(localStorage.getItem('dp_pinones')||'null'); if(Array.isArray(s3) && s3.length) pinones=s3 }catch(e){}
+function savePinones(){ try{ localStorage.setItem('dp_pinones', JSON.stringify(pinones)) }catch(e){} }
+function pinonActivo(){ return pinones.find(p=> p.name===dose.pinon) || pinones[0] }
+// velocidades de turbina calibradas: % de potencia (duty) → m/s medidos (5–30)
+let turbVel = []
+try{ const s2=JSON.parse(localStorage.getItem('dp_turbvel')||'null'); if(Array.isArray(s2)) turbVel=s2 }catch(e){}
+function saveTurbVel(){ try{ localStorage.setItem('dp_turbvel', JSON.stringify(turbVel)) }catch(e){} }
+// Al cambiar turbina o retardo, si hay pérdida calibrada para el seteo, se aplica.
+function syncPerdida(){
+  const e = perdidaCalibrada()
+  if(e) dose.perdida = e.per
+}
+// La configuración de dosificación persiste en el dispositivo. La vista
+// Dosificar es idéntica para Admin y Operador (todos los parámetros editables).
+try{ Object.assign(dose, JSON.parse(localStorage.getItem('dp_dose')||'{}')) }catch(e){}
+function saveDose(){ try{ localStorage.setItem('dp_dose', JSON.stringify(dose)) }catch(e){}; flashSaved() }
+// círculo de "guardado": aparece en la esquina superior derecha de Dosificar
+// con cada cambio aplicado y se desvanece solo.
+let saveDotT = null
+function flashSaved(){
+  const el = document.getElementById('saveDot')
+  if(!el) return
+  el.classList.add('show')
+  clearTimeout(saveDotT)
+  saveDotT = setTimeout(()=> el.classList.remove('show'), 1600)
+}
+
+// ---------- contraseñas por perfil (cambiables solo en Perfil) ----------
+const PW_DEFAULTS = { admin:'admin123', operador:'1234' }
+function getPw(p){ try{ return localStorage.getItem('dp_pw_'+p) || PW_DEFAULTS[p] }catch(e){ return PW_DEFAULTS[p] } }
+function setPwStore(p,v){ try{ localStorage.setItem('dp_pw_'+p, v) }catch(e){} }
+// stageStart/warmupMs/cleanMs: las etapas 1 y 3 son POR TIEMPO (solo turbina);
+// solo la etapa 2 (aplicación) avanza por conteo hall.
+const overlay = { open:false, target:0, hallStart:0, stageStart:0, warmupMs:2500, cleanMs:3500 }
+let ovTicker = null
+const alerts = []
+
+// ---------- navegación ----------
+function tabsFor(prof){
+  const base = [
+    ['home','&#127968;','Inicio'],['dosificar','&#128167;','Dosificar'],
+    ['stats','&#128202;','Data'],['alertas','&#128276;','Alertas'],
+  ]
+  // Mapa, Configuración y Pruebas: solo Administrador
+  if(prof==='admin') base.splice(3, 0, ['mapa','&#128506;','Mapa'])
+  if(prof==='admin') base.push(['config','&#9881;','Config'], ['pruebas','&#128295;','Pruebas'])
+  return base
+}
+function buildTabs(){
+  document.querySelectorAll('[data-tabs]').forEach(bar=>{
+    bar.innerHTML = tabsFor(profile).map(([k,ic,l])=>`<div data-go="${k}"><span class="ic">${ic}</span>${l}</div>`).join('')
+  })
+  document.querySelectorAll('[data-tabs] div').forEach(d=> d.addEventListener('click', ()=> go(d.dataset.go)))
+  // versión web: la misma navegación en la barra lateral (+ Perfil; Vincular QR solo admin)
+  const extra = profile==='admin' ? [['vincular','&#128247;','Vincular QR'],['perfil','&#128100;','Perfil']] : [['perfil','&#128100;','Perfil']]
+  const items = tabsFor(profile).concat(extra)
+  $('sNav').innerHTML = items.map(([k,ic,l])=>`<div data-nav="${k}"><span>${ic}</span>${l}</div>`).join('')
+  document.querySelectorAll('#sNav div').forEach(d=> d.addEventListener('click', ()=> go(d.dataset.nav)))
+  $('sUser').textContent = profile==='admin' ? '⚙ Administrador' : '👤 Operador'
+}
+let current = 'login'
+function go(name){
+  // Mapa, Vincular QR, Configuración y Pruebas son solo del Administrador
+  if(profile!=='admin' && (name==='mapa' || name==='vincular' || name==='config' || name==='pruebas')) name='home'
+  if(current==='vincular' && name!=='vincular') qrStop()   // apagar la cámara al salir
+  current = name
+  document.querySelectorAll('.scrn').forEach(s=>s.classList.toggle('on', s.dataset.scrn===name))
+  document.querySelectorAll('[data-tabs] div').forEach(d=>d.classList.toggle('on', d.dataset.go===name))
+  // versión web: barra lateral (oculta en el login) y resaltado del ítem activo
+  document.body.classList.toggle('on-login', name==='login')
+  document.querySelectorAll('#sNav div').forEach(d=>d.classList.toggle('on', d.dataset.nav===name))
+  if(name==='mapa') initLeafMap()
+  if(window.__termReady) applyTermVisibility()
+  render()
+}
+
+// ---------- conexión ----------
+function setConn(on, txt, kind){
+  const st = $('connSt'); st.className = 'st ' + (on?'on':'off')
+  $('connTxt').textContent = txt
+  $('linkTop').textContent = on ? (kind==='ble'?'BT':'Wi-Fi') : '—'
+}
+let verTimer = null
+function onOpen(kind){
+  transport = kind
+  connChan = (kind==='ble') ? 'ble' : 'wifi'   // la radio activa es por la que entramos
+  renderConnSw()
+  setConn(true, kind==='ble' ? 'Bluetooth' : 'Conectado', kind)
+  log('== Conectado ('+kind+') ==')
+  // v8: todos los canales exigen clave; en uno ya autorizado es inofensivo.
+  send(cmd.clave())
+  // v8.2: verificar la versión del firmware. Si la tarjeta no responde VERSION,
+  // tiene un firmware viejo y las funciones nuevas (calibrar, EVT...) fallarán.
+  send(cmd.version())
+  clearTimeout(verTimer)
+  verTimer = setTimeout(()=>{
+    if(transport!=='none' && !state.fwVersion){
+      pushAlert('La tarjeta no reportó su versión: firmware desactualizado. Flashea dosapalm/firmware (v8.2) para calibración y eventos.', 'alta')
+      log('!! Sin respuesta a `version`: la tarjeta necesita el firmware v8.2')
+    }
+  }, 4000)
+  send(cmd.status()); send(cmd.modo('real')); send(cmd.log(true))
+}
+function connect(){
+  const host = $('host').value.trim()||'localhost', port = $('port').value.trim()||'8081'
+  if(ws){ try{ws.close()}catch(e){} }
+  log('== Conectando ws://'+host+':'+port+'/ ...')
+  ws = new WebSocket('ws://'+host+':'+port+'/')
+  ws.onopen = ()=> onOpen('ws')
+  ws.onclose = ()=>{ if(transport==='ws'){ transport='none'; setConn(false,'Desconectado') } log('== Wi-Fi desconectado ==') }
+  ws.onerror = ()=>{ log('!! Error Wi-Fi. ¿Unido a la red del equipo / simulador levantado?') }
+  ws.onmessage = (ev)=>{ for(const line of asm.push(String(ev.data))) onLine(line) }
+}
+function connectBle(){
+  if(!navigator.bluetooth){ log('!! Web Bluetooth no disponible aquí. En iPhone usa el navegador Bluefy; en Android, Chrome.'); return }
+  log('== Buscando por Bluetooth (BLE)... El equipo debe estar en `conn ble`')
+  navigator.bluetooth.requestDevice({filters:[{namePrefix:'DOSAPALM'},{namePrefix:'DPLM'}],optionalServices:[NUS]})
+  .then(dev=>{ bleDev=dev; dev.addEventListener('gattserverdisconnected',()=>{ if(transport==='ble'){ transport='none'; bleRx=null; setConn(false,'Desconectado') } log('== Bluetooth desconectado ==') }); return dev.gatt.connect() })
+  .then(sv=> sv.getPrimaryService(NUS))
+  .then(svc=> Promise.all([svc.getCharacteristic(NUS_RX), svc.getCharacteristic(NUS_TX)]))
+  .then(cs=>{ bleRx=cs[0]; const tx=cs[1]
+    tx.addEventListener('characteristicvaluechanged',(e)=>{ for(const line of asm.push(new TextDecoder().decode(e.target.value))) onLine(line) })
+    return tx.startNotifications() })
+  .then(()=>{ if(bleDev.name) setSerial(bleDev.name); onOpen('ble') })
+  .catch(e=> log('!! Bluetooth: '+e.message))
+}
+// Cola ÚNICA de escritura BLE. Web Bluetooth no tolera writeValue concurrentes
+// ("GATT operation already in progress"): al dosificar, la app envía 6 comandos
+// seguidos y sin cola las escrituras chocan y se PIERDEN comandos en el equipo.
+let bleQueue = Promise.resolve()
+function bleWrite(data){
+  const enc = new TextEncoder().encode(data)
+  bleQueue = bleQueue.then(async ()=>{
+    for(let i=0; i<enc.length; i+=20){
+      if(!bleRx) return
+      await bleRx.writeValue(enc.slice(i, i+20))
+    }
+  }).catch(e=>{ log('!! BLE: '+e.message) })
+}
+function send(c){
+  if(transport==='ws' && ws && ws.readyState===1){ ws.send(c+'\n'); log('>> '+c) }
+  else if(transport==='ble' && bleRx){ bleWrite(c+'\n'); log('>> '+c) }
+}
+
+// ---------- ingesta de líneas ----------
+let lastDoseEndAt = 0      // v9.1: fin del último ciclo (guardián de repetición)
+let expectingStart = false // true solo cuando la app misma pidió dosificar
+function onLine(line){
+  log(line)
+  // v8.8: verificación de "Aplicar frecuencias" — marcar cada confirmación.
+  if(fqPending){
+    const fm = /Frecuencia (TURB|DOSF|TOL) = (\d+) Hz/.exec(line)
+    if(fm) fqPending[fm[1]] = Number(fm[2])
+  }
+  // v8: si el canal quedó sin autorizar (reconexión BLE, app vieja), reenviar la
+  // clave una vez y avisar — si no, todos los comandos se ignoran en silencio.
+  if(/Acceso restringido/.test(line)){
+    if(!onLine._reauth || Date.now()-onLine._reauth>3000){
+      onLine._reauth = Date.now()
+      send(cmd.clave())
+      pushAlert('El equipo pidió la clave: reenviada automáticamente. Reintenta la acción.', 'media')
+    }
+  }
+  const parsed = parseLine(line)
+  // el tracker ve el estado ANTERIOR (necesita el hall al arrancar)
+  let ev = null
+  if(tracker){ ev = tracker.feed(parsed, state); if(ev) onDoseEvent(ev) }
+  // Red de seguridad: si llegó el final del ciclo pero el arranque nunca se
+  // reconoció (línea perdida/formato distinto), la ventana se cierra IGUAL y
+  // la aplicación se cuenta con lo que sí sabemos.
+  if(!ev && (parsed.t==='doseDone' || parsed.t==='doseStopped')){
+    if(overlay.open){
+      log('!! Ciclo terminó sin arranque reconocido: cierro y registro con datos del final')
+      if(parsed.t==='doseDone' && session.active){
+        const hasFix = state.gpsFix && state.lat!=null
+        onDoseEvent({
+          id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
+          device_serial: $('serialTxt').textContent, session_id: 's-fallback',
+          ts_device: new Date().toISOString(), seq: 0,
+          gps_available: hasFix, lat: hasFix?state.lat:null, lon: hasFix?state.lon:null,
+          last_known_lat: hasFix?null:state.lastKnownLat, last_known_lon: hasFix?null:state.lastKnownLon,
+          grams: parsed.grams, requested_grams: dose.dosis, hall_steps: Math.max(0, state.hall-overlay.hallStart),
+          cycle: { turb_pct: dose.turb, tini_ms: dose.tini, tfin_ms: dose.tfin, retardo_ms: dose.retardo },
+          fw_version: '?', result: 'ok',
+        })
+      } else {
+        closeOverlay(); render()
+      }
+    }
+  }
+  if(parsed.t==='doseDone' || parsed.t==='doseStopped'){ lastDoseEndAt = Date.now() }
+  // v9.1: aviso del bloqueo anti-repetición del equipo
+  if(/DOSIFICAR BLOQUEADO: anti-repeticion/.test(line)){
+    pushAlert('El equipo bloqueó un arranque repetido (anti-repetición). Si nadie tocó el pulsador, es ruido eléctrico — típico con la turbina a alta potencia.','warn')
+  }
+  if(parsed.t==='doseStart'){
+    // v9.1: GUARDIÁN DE REPETICIÓN — un ciclo que la app no pidió, arrancando
+    // justo después del anterior, es casi seguro ruido: se DETIENE de inmediato.
+    if(!overlay.open && !expectingStart && lastDoseEndAt && (Date.now()-lastDoseEndAt) < 6000){
+      send(cmd.parar())
+      pushAlert('⚠ CICLO REPETIDO detectado y DETENIDO automáticamente (arrancó solo tras el anterior — posible ruido con turbina alta). Revisa el rearme anti-repetición en Configuración.','alta')
+      log('!! GUARDIÁN: ciclo repetido no solicitado → parar enviado')
+      return
+    }
+    expectingStart = false
+    // Ciclo que la app NO lanzó = pulsador físico RF (u otro control): se abre
+    // la ventana de progreso igual y la aplicación se cuenta en la sesión.
+    if(!overlay.open){
+      overlay.open = true
+      overlay.cycleStart = Date.now()
+      $('cycOverlay').classList.add('show')
+      clearInterval(ovTicker)
+      ovTicker = setInterval(()=>{ if(overlay.open) renderOverlay() }, 250)
+      pushAlert('Ciclo iniciado con el pulsador físico del equipo — siguiéndolo en vivo','info')
+      log('!! Ciclo externo detectado (pulsador físico): la app lo sigue y lo registra')
+    }
+    overlay.target = parsed.pulses; overlay.hallStart = state.hall
+    overlay.stageStart = Date.now()
+    overlay.warmupMs = parsed.warmupMs>0 ? parsed.warmupMs : dose.tini
+    overlay.cleanMs = dose.tfin
+    clearTimeout(ovWatchdog); $('ovWarn').style.display='none'  // el equipo confirmó
+  }
+  // rastro del pulsador físico en el terminal y las alertas
+  if(/EVENTO: pulsador liberado/.test(line) && !overlay.open){
+    log('!! Pulsador físico detectado en el equipo')
+  }
+  if(parsed.t==='doseDosing'){ overlay.stageStart = Date.now() }
+  if(parsed.t==='doseCleaning'){ overlay.stageStart = Date.now(); if(parsed.cleanMs>0) overlay.cleanMs = parsed.cleanMs }
+  if(parsed.t==='fault'){ pushAlert(parsed.code==='JAM'?'Atasco en el dosificador':'Sensor hall no detectado', 'alta') }
+  // calibración: registrar el instante (reloj del equipo) de cada pulso hall
+  if(parsed.t==='hall'){
+    const ts = stripTimestamp(line).ms
+    if(ts!=null){ hallCal.push(ts); if(hallCal.length>21) hallCal.shift() }
+  }
+  if(parsed.t==='hallReset'){ hallCal.length=0 }
+  // motor de calibración: avanzar al siguiente punto / abortar ante fallas
+  if(calState.active){
+    if(parsed.t==='calStart'){ calState.started = true; clearTimeout(calState.ackTimer) }
+    else if(parsed.t==='calDone') onCalDoseDone(parsed.dutyPct, parsed.valid)
+    else if(parsed.t==='fault') abortCal('⚠ Calibración abortada: '+(parsed.code==='JAM'?'atasco en el dosificador':'sensor hall no detectado'))
+    else if(parsed.t==='calStopped' || parsed.t==='doseStopped') abortCal('Calibración detenida.')
+    else if(/Comando desconocido/.test(line) && !calState.started){
+      abortCal('⚠ La tarjeta no conoce el comando `calibrar`: tiene el firmware anterior. Flashea el v8.2 (dosapalm/firmware) y reintenta.')
+    }
+    // Auto-recuperación: la tarjeta perdió el modo (reinicio) → fijarlo y reintentar.
+    else if(/Primero selecciona el modo/.test(line) && !calState.started && !calState.modeRetry){
+      calState.modeRetry = true
+      log('!! El equipo no tenía modo: enviando `modo real` y reintentando el punto')
+      send(cmd.modo('real'))
+      setTimeout(()=>{ if(calState.active && !calState.started) send(cmd.calibrar(calState.current, calState.pulses)) }, 600)
+    }
+    // Auto-recuperación: canal sin autorizar (la clave ya se reenvió arriba) → reintentar.
+    else if(/Acceso restringido/.test(line) && !calState.started && !calState.modeRetry){
+      calState.modeRetry = true
+      setTimeout(()=>{ if(calState.active && !calState.started) send(cmd.calibrar(calState.current, calState.pulses)) }, 800)
+    }
+  }
+  // modo continuo: si el equipo lo detuvo (parar, safe, atasco), reflejarlo en el botón
+  if(calRunOn && (parsed.t==='calStopped' || parsed.t==='doseStopped' || parsed.t==='safe' || parsed.t==='fault')){
+    calRunOn = false
+    updateCalOnOff()
+  }
+  state = reduce(state, parsed)
+  // serial: lo tomamos del status
+  const m = /Serial:\s*([\w-]+)/.exec(line); if(m){ setSerial(m[1]) }
+  render()
+}
+function setSerial(s){ $('serialTxt').textContent=s; $('devSerial').textContent=s; $('homeSerial').textContent=s }
+
+// ---------- evento de dosis sintetizado ----------
+let ovWatchdog = null
+function closeOverlay(){
+  overlay.open = false
+  clearTimeout(ovWatchdog)
+  clearInterval(ovTicker); ovTicker = null
+  $('cycOverlay').classList.remove('show')
+}
+function onDoseEvent(ev){
+  closeOverlay()
+  // Dos cifras por aplicación: TEÓRICO = lo que dosificó la máquina (cavidades
+  // × gramos por cavidad) y REAL = lo que llegó al final de la manguera tras la
+  // pérdida vigente. Se congelan en el evento con el seteo del momento.
+  const cav = ev.grams / 2   // el firmware cuenta 2 g por pulso
+  ev.gramsTeo = Math.round(cav * gcavG() * 10) / 10
+  ev.gramsReal = Math.round(ev.gramsTeo * (1 - perdidaPct()/100) * 10) / 10
+  if(session.active){
+    session.applications++
+    session.grams += ev.gramsTeo
+    session.gramsReal = Math.round(((session.gramsReal||0) + ev.gramsReal) * 10) / 10
+    session.events.unshift(ev)
+  } else {
+    pushAlert('Aplicación completada SIN operación activa: no quedó registrada en Data. Inicia la operación en Dosificar (esquina superior derecha).','warn')
+  }
+  const g = ev.result==='ok' ? 'ok' : (ev.result==='partial'?'parcial':'error')
+  log('EVENTO sintetizado: '+ev.grams+' g ('+g+') id='+ev.id.slice(0,8))
+  render()
+}
+
+// ---------- alertas ----------
+function pushAlert(msg, sev){ alerts.unshift({msg, sev, ts:Date.now()}); render() }
+
+// ---------- ejecutar ciclo ----------
+function ejecutar(){
+  if(transport==='none'){ log('!! Conecta el equipo primero (Wi-Fi o Bluetooth)'); return }
+  send(cmd.modo('real'))
+  send(cmd.motor('turb', dose.turb))
+  // La máquina dosifica MÁS para compensar la pérdida de la manguera, y el
+  // conteo va por cavidades (dosis de máquina ÷ gramos por cavidad).
+  send(cmd.tini(dose.tini)); send(cmd.tfin(dose.tfin)); send(cmd.dosis(dosisComando()))
+  send(cmd.retardo(dose.retardo))
+  expectingStart = true   // este arranque SÍ lo pidió la app
+  send(cmd.dosificar())
+  overlay.open = true; overlay.target = pulsosNecesarios(); overlay.hallStart = state.hall
+  overlay.stageStart = Date.now(); overlay.cycleStart = Date.now(); overlay.warmupMs = dose.tini; overlay.cleanMs = dose.tfin
+  $('ovWarn').style.display='none'
+  $('cycOverlay').classList.add('show')
+  // Las etapas 1 y 3 avanzan por tiempo: refrescar aunque el equipo no emita líneas.
+  clearInterval(ovTicker)
+  ovTicker = setInterval(()=>{ if(overlay.open) renderOverlay() }, 250)
+  // Si en 5 s el equipo no confirma el arranque del ciclo, avisar en vez de
+  // dejar la ventana girando para siempre (conexión caída, clave, sin modo...).
+  clearTimeout(ovWatchdog)
+  ovWatchdog = setTimeout(()=>{
+    if(overlay.open && tracker && !tracker.inProgress){
+      const w=$('ovWarn')
+      w.textContent='⚠ El equipo no confirmó el ciclo. Revisa el terminal de abajo (conexión, clave, modo) y toca Parar para cerrar.'
+      w.style.display='block'
+    }
+  }, 5000)
+  render()
+}
+
+// ---------- render ----------
+function render(){
+  // chips de conexión / estado
+  const linked = transport!=='none'
+  chip('chLink', linked, 'Wi-Fi directo', linked?'g':'')
+  chip('chGps', state.gpsFix, 'GPS '+(state.gpsFix?(state.sats+' sat'):'sin fix'), state.gpsFix?'g':'a')
+  chip('chHall', true, 'Hall '+state.hall+' ('+(state.hall*2)+' g)', 'b')
+  chip('chMode', true, 'Modo '+(state.mode==='NONE'?'—':state.mode), state.mode==='REAL'?'g':'')
+  // versión del firmware detectada
+  $('fwTxt').textContent = state.fwVersion ? ('v'+state.fwVersion) : '—'
+  $('fwTxt').style.color = state.fwVersion ? '#2f8a34' : ''
+  // versión web: estado en la barra lateral
+  $('sDot').className = 'sdot'+(linked?' on':'')
+  $('sConn').textContent = linked
+    ? (($('serialTxt').textContent!=='—' ? $('serialTxt').textContent : 'Conectado') + (state.fwVersion?' · v'+state.fwVersion:''))
+    : 'Desconectado'
+  // devrow
+  $('devSub').textContent = linked ? ('En línea · '+(state.mode==='NONE'?'sin modo':state.mode)) : 'Sin conectar'
+  setChip($('devChip'), linked, linked?'En línea':'Offline', linked?'g':'')
+  // ring GPS
+  const sats = state.gpsFix ? state.sats : 0
+  const frac = Math.min(sats/10, 1)
+  $('homeRing').setAttribute('stroke-dashoffset', String(314*(1-frac)))
+  $('homeRing').setAttribute('stroke', state.gpsFix?'#4CAF50':'#e2a230')
+  $('homeRingT').textContent = state.gpsFix ? (sats+' sat') : 'sin fix'
+  // dosificar
+  $('dosisVal').textContent = dose.dosis
+  for(const [id,key] of [['inTini','tini'],['inTfin','tfin'],['inRetardo','retardo'],['inPerdida','perdida']]){
+    const el=$(id); if(document.activeElement!==el) el.value = dose[key]
+  }
+  if(document.activeElement!==$('inTurbVel')) $('inTurbVel').value = String(dose.turb)
+  const pn = pinonActivo()
+  if(document.activeElement!==$('inPinon')) $('inPinon').value = pn.name
+  $('pinonNote').textContent = pn.name+': '+pn.cav+' cavidades · '+pn.gcav+' g por cavidad (se configura en Configuración)'
+  $('opSummaryChips').innerHTML =
+    `<span class="chip">Turbina ${dose.turb}%</span>`+
+    `<span class="chip">Inicio ${(dose.tini/1000).toFixed(1)} s</span>`+
+    `<span class="chip">Limpieza ${(dose.tfin/1000).toFixed(1)} s</span>`+
+    `<span class="chip">Retardo ${dose.retardo===0?'sin control':dose.retardo+' ms'}</span>`
+  // Recalculo en tiempo real: dosis final deseada → dosis de máquina → cavidades → salida real
+  const p = perdidaPct()
+  const nCav = pulsosNecesarios()
+  const gReal = Math.round(nCav * gcavG() * 10) / 10
+  const salida = gReal * (1 - p/100)
+  // ¿la pérdida activa está calibrada para el seteo actual (turbina + retardo)?
+  const pcal = perdidaCalibrada()
+  $('perdidaNote').innerHTML = (pcal && pcal.per===dose.perdida)
+    ? ('<span style="color:#2f8a34">✓ Calibrada para turbina '+pcal.turb+'% · retardo '+pcal.ret+' ms</span>')
+    : ('<span style="color:#b9791a">⚠ Sin pérdida calibrada para turbina '+dose.turb+'% · '+dose.retardo+' ms — usando '+p+'% manual (calibra en Configuración)</span>')
+  // velocidad de turbina: en Dosificar solo se habla en m/s (el % vive en Pruebas)
+  const tv = turbVel.find(e=> e.pct===dose.turb)
+  $('turbVelNote').innerHTML = tv
+    ? ('<span style="color:#2f8a34">✓ Turbina a <b>'+tv.ms+' m/s</b>'+(tv.alt!=null?' · palma de '+tv.alt+' m':'')+' (calibrada en Configuración)</span>')
+    : ('<span style="color:#b9791a">⚠ El seteo actual de turbina no tiene velocidad calibrada — calibra en Configuración</span>')
+  $('doseHint').innerHTML = p>0
+    ? ('Con '+p+'% de pérdida: la máquina dosifica <b>'+gReal+' g</b> ('+nCav+' cavidades × '+gcavG()+' g) → al final de la manguera salen ≈ <b>'+(Math.round(salida*10)/10)+' g</b>')
+    : (gReal===dose.dosis
+        ? (nCav+' cavidades · '+gReal+' g exactos')
+        : ('⚠ el equipo entrega '+gReal+' g ('+nCav+' cavidades): la dosis cae en pasos de '+gcavG()+' g'))
+  // tiempo estimado total del ciclo: T.ini + (cavidades × cadencia) + T.fin.
+  // La cadencia usa el intervalo MEDIDO en la calibración si existe; si no, el objetivo.
+  const rc = calResults[dose.retardo]
+  const cadencia = (rc && rc.avg!=null) ? rc.avg : dose.retardo
+  if(cadencia>0 && nCav>0){
+    const tApp = nCav * cadencia
+    const total = dose.tini + tApp + dose.tfin
+    $('cycleDesc').innerHTML = '≈ <b>'+(total/1000).toFixed(1)+' s</b> total &nbsp;('+(dose.tini/1000).toFixed(1)+' + '+(tApp/1000).toFixed(1)+' + '+(dose.tfin/1000).toFixed(1)+')'
+    $('dumTiempo').textContent = '≈ '+(total/1000).toFixed(1)+' s'
+  } else {
+    $('cycleDesc').textContent = '≈ T.ini + dosis + T.fin (retardo 0: sin estimación)'
+    $('dumTiempo').textContent = '—'
+  }
+  // cards de la vista Sencilla
+  $('dumDosis').textContent = dose.dosis
+  $('dumDosisSub').textContent = p>0 ? ('la máquina dosifica '+gReal+' g ('+nCav+' cavidades) → salen ≈ '+(Math.round(salida*10)/10)+' g') : 'a la salida de la manguera'
+  const tvAct = turbVel.find(e=> e.pct===dose.turb)
+  document.querySelectorAll('.dvel').forEach(b=> b.classList.toggle('on', !!tvAct && Number(tvAct.ms)===Number(b.dataset.dvel)))
+  $('dumVelSub').textContent = tvAct ? ('turbina a '+tvAct.ms+' m/s') : 'sin velocidad calibrada para el seteo actual'
+  if(document.activeElement!==$('dumTini')) $('dumTini').value = dose.tini
+  if(document.activeElement!==$('dumTfin')) $('dumTfin').value = dose.tfin
+  if(document.activeElement!==$('dumRet')) $('dumRet').value = dose.retardo
+  // barras del panel dosificar según etapa
+  paintBars(document.querySelectorAll('#dosificar .stagebars .sb') , state.dose)
+  // overlay
+  if(overlay.open) renderOverlay()
+  // sesión
+  $('sApps').textContent = session.applications
+  $('sGrams').innerHTML = session.grams+'<span style="font-size:12px;color:#9aa1ad"> g</span>'
+  $('sGramsReal').innerHTML = (session.gramsReal||0)+'<span style="font-size:12px;color:#9aa1ad"> g</span>'
+  $('sPending').textContent = session.events.length+' por sincronizar'
+  $('btnSession').innerHTML = session.active
+    ? ('<span class="aic">&#9632;</span>Finalizar operación<span class="asub">'+session.applications+' aplicaciones guardadas</span>')
+    : ('<span class="aic">&#9654;</span>Iniciar operación<span class="asub">guarda las aplicaciones en Data</span>')
+  $('btnSession').classList.toggle('on', session.active)
+  $('btnSession').title = session.active ? ('Operación activa desde '+fmt(session.startedAt)+' · perfil '+profile) : 'Inicia una operación para acumular las aplicaciones'
+  renderEvents()
+  renderMap()
+  renderStats()
+  renderAlerts()
+  renderPruebas()
+}
+
+// ---------- estadísticas: velas = intervalos iguales de la sesión ----------
+let velas = 6
+function renderStats(){
+  const evs = session.events
+  $('stApps').textContent = session.applications
+  $('stGrams').textContent = session.grams
+  $('stAvg').textContent = session.applications>0 ? (session.grams/session.applications).toFixed(1) : '0'
+  document.querySelectorAll('#velasSel .retchip').forEach(c=> c.classList.toggle('on', Number(c.dataset.v)===velas))
+  // resultados (ok / parcial / error)
+  const counts = { ok:0, partial:0, error:0 }
+  evs.forEach(ev=>{ counts[ev.result]=(counts[ev.result]||0)+1 })
+  $('stResults').innerHTML =
+    `<span class="chip g"><span class="d"></span>${counts.ok} ok</span>`+
+    `<span class="chip a"><span class="d"></span>${counts.partial} parciales</span>`+
+    `<span class="chip r"><span class="d"></span>${counts.error} con error</span>`
+  // velas: dividir [inicio de sesión, ahora] en N intervalos y contar aplicaciones
+  const chart = $('stChart')
+  if(evs.length===0 || !session.startedAt){
+    chart.innerHTML = '<div class="calempty">Sin aplicaciones en la sesión.</div>'
+    $('stT0').textContent='—'; $('stT1').textContent='—'
+    return
+  }
+  const t0 = session.startedAt, t1 = Date.now()
+  const span = Math.max(t1-t0, 60000)  // mínimo 1 min para que las velas no colapsen
+  const buckets = new Array(velas).fill(0)
+  evs.forEach(ev=>{
+    const ts = new Date(ev.ts_device).getTime()
+    const i = Math.min(velas-1, Math.max(0, Math.floor((ts-t0)/span*velas)))
+    buckets[i]++
+  })
+  const max = Math.max(...buckets, 1)
+  chart.innerHTML = buckets.map(n=>
+    `<div class="calbar${n>0?' ok':''}" style="height:${Math.max(4, Math.round(n/max*100))}%" title="${n} aplicaciones"></div>`
+  ).join('')
+  $('stT0').textContent = fmt(t0)
+  $('stT1').textContent = fmt(t1)
+}
+function renderPruebas(){
+  // chip y segmento de modo
+  const modo = state.mode==='NONE' ? '—' : state.mode
+  setChip($('pModeChip'), true, 'Modo '+modo, state.mode==='REAL'?'g':(state.mode==='PRUEBA'?'b':''))
+  document.querySelectorAll('#pSeg div').forEach(d=>{
+    d.classList.toggle('on', (d.dataset.m==='prueba'&&state.mode==='PRUEBA')||(d.dataset.m==='real'&&state.mode==='REAL'))
+  })
+  // sliders espejan el estado del equipo, salvo mientras el admin los arrastra
+  const map = { pTurb:state.turb, pDosf:state.dosf, pTol:state.tol }
+  for(const [id,v] of Object.entries(map)){
+    const el = $(id)
+    if(document.activeElement !== el){ el.value = v; $(id+'V').textContent = v }
+  }
+  // toggles de LEDs/salidas espejan el estado reducido de las líneas del equipo
+  const leds = { r:state.ledR, b:state.ledB, g:state.ledG, all:state.ledR&&state.ledG&&state.ledB }
+  document.querySelectorAll('.sw[data-led]').forEach(sw=> sw.classList.toggle('on', !!leds[sw.dataset.led]))
+  document.querySelectorAll('.sw[data-out]').forEach(sw=> sw.classList.toggle('on', sw.dataset.out==='aux'?state.aux:state.ld))
+  // retardo seleccionado
+  $('retSelVal').textContent = dose.retardo
+  document.querySelectorAll('#retSel .retchip').forEach(c=> c.classList.toggle('on', Number(c.dataset.v)===dose.retardo))
+  // estado del sistema en vivo
+  const L=(id,on,color)=>{ const el=$(id); el.style.background=on?color:'#e3e7ee'; el.style.boxShadow=on?('0 0 8px '+color):'none' }
+  L('syR', state.ledR, '#e04b4b'); L('syB', state.ledB, '#2f6bd6'); L('syG', state.ledG, '#4CAF50')
+  L('syAux', state.aux, '#e2a230'); L('syLd', state.ld, '#e2a230')
+  $('syTurb').textContent=state.turb; $('syTurbB').style.width=state.turb+'%'
+  $('syDosf').textContent=state.dosf; $('syDosfB').style.width=state.dosf+'%'
+  $('syTol').textContent=state.tol;   $('syTolB').style.width=state.tol+'%'
+  setChip($('syHall'), true, 'Hall '+state.hall+' · '+(state.hall*2)+' g', 'b')
+  setChip($('syBtn'), state.btnPressed, 'Btn '+(state.btnPressed?'PRES':'libre'), state.btnPressed?'a':'')
+  setChip($('syGps'), state.gpsFix, 'GPS '+(state.gpsFix?state.sats+' sat':'sin fix'), state.gpsFix?'g':'a')
+  setChip($('sySeq'), !!state.seq, 'Seq '+(state.seq||'—'), state.seq?'g':'')
+  // contador hall en tiempo real
+  $('hcPulses').textContent = state.hall
+  $('hcGrams').textContent = state.hall*2
+  $('hcHz').textContent = state.hallHz.toFixed(1)
+  // calibración del retardo — lecturas REALES del hall (intervalos entre pulsos)
+  // El objetivo ES el select de ms/cavidad; durante una medición, el punto en curso.
+  const target = calMeasureTarget!=null ? calMeasureTarget : (Number($('calPoint').value)||0)
+  if(calMeasureTarget!=null && document.activeElement!==$('calPoint')) $('calPoint').value = calMeasureTarget
+  // duty del lazo en vivo (línea CTRL) y duty CALIBRADO del punto en pantalla:
+  // el calibrado es el PROMEDIO de las lecturas dentro del ±15% del objetivo,
+  // calculado por el propio firmware (v8.6).
+  $('calDutyLive').textContent = state.ctrlDutyPct!=null ? state.ctrlDutyPct+'%' : '—'
+  const rTarget = calResults[target]
+  $('calDutyFinal').textContent = rTarget && rTarget.dutyPct!=null
+    ? (rTarget.dutyPct+'%'+(rTarget.valid!=null ? ' (prom. '+rTarget.valid+' ok)' : ''))
+    : '—'
+  // Intervalos entre pulsos consecutivos, descartando las pausas entre dosis
+  // (un hueco > 4x el objetivo no es una cavidad lenta: es el equipo detenido).
+  const gapMax = Math.max(2000, target*4)
+  const iv=[]
+  for(let i=1;i<hallCal.length;i++){ const d=hallCal[i]-hallCal[i-1]; if(d>0 && d<=gapMax) iv.push(d) }
+
+  const chart=$('calChart')
+  if(iv.length===0){
+    chart.innerHTML='<div class="calempty">Sin lecturas: calibra un punto para medir (solo dosificador).</div>'
+    $('calVals').textContent=''
+    $('calMeas').textContent='—'; $('calDev').textContent='—'; $('calDev').style.color=''
+    $('calMinMax').textContent='—'; $('calHint').textContent=''
+  } else {
+    // gráfica: una barra por lectura; la línea azul marca el objetivo (a media altura)
+    const shown = iv.slice(-14)
+    const scaleMax = target>0 ? target*2 : Math.max(...shown)*1.25
+    const cls = (d)=>{
+      if(target<=0) return ''
+      const dev = Math.abs(d-target)/target*100
+      return dev<=15 ? ' ok' : (dev<=30 ? ' warn' : ' bad')
+    }
+    let html = shown.map(d=>{
+      const h = Math.max(4, Math.min(100, Math.round(d/scaleMax*100)))
+      return `<div class="calbar${cls(d)}" style="height:${h}%" title="${d} ms"></div>`
+    }).join('')
+    if(target>0){
+      const top = Math.max(0, Math.min(100, Math.round(100 - target/scaleMax*100)))
+      html += `<div class="caltarget" style="top:${top}%"><span>${target} ms</span></div>`
+    }
+    chart.innerHTML = html
+    // lecturas crudas, la más reciente al final
+    $('calVals').textContent = 'Lecturas: '+iv.slice(-12).join(' · ')+' ms'
+    // estadísticas sobre las últimas 10
+    const win = iv.slice(-10)
+    const avg = Math.round(win.reduce((a,b)=>a+b,0)/win.length)
+    $('calMeas').textContent = avg+' ms'
+    $('calMinMax').textContent = Math.min(...win)+' / '+Math.max(...win)
+    if(target>0){
+      const dev = Math.round((avg-target)/target*100)
+      const el=$('calDev'); el.textContent=(dev>0?'+':'')+dev+'%'
+      el.style.color = Math.abs(dev)<=15 ? '#2f8a34' : (Math.abs(dev)<=30 ? '#b9791a' : '#c0392b')
+      $('calHint').textContent = Math.abs(dev)<=15
+        ? '✓ El lazo converge dentro del ±15% ('+win.length+' lecturas en la ventana).'
+        : '⚠ Fuera de rango: si no converge, ajustar KP_RETARDO / DOSF_DUTY_MIN en el firmware (protocolo de campo, Fase 4).'
+    } else {
+      $('calDev').textContent='—'; $('calDev').style.color=''
+      $('calHint').textContent='Retardo 0 = sin control: '+avg+' ms es la velocidad natural del motor con esta carga.'
+    }
+  }
+}
+function chip(id, on, text, cls){ const c=$(id); c.className='chip '+(cls||''); c.innerHTML='<span class="d"></span>'+text }
+function setChip(node, on, text, cls){ node.className='chip '+(cls||''); node.innerHTML='<span class="d"></span>'+text }
+function paintBars(bars, ds){
+  const order = {warmup:0, dosing:1, cleaning:2, idle:-1}
+  const idx = order[ds] ?? -1
+  bars.forEach((b,i)=>{ b.className = 'sb'+(i<idx?' done':(i===idx?' on':'')) })
+}
+function renderOverlay(){
+  const ds = state.dose
+  const done = Math.max(0, state.hall - overlay.hallStart)
+  const hallFrac = overlay.target>0 ? Math.min(done/overlay.target,1) : 0
+  const elapsed = Date.now() - overlay.stageStart
+  // Progreso global por etapas REALES del ciclo:
+  //   1) Limpieza inicial (solo turbina, POR TIEMPO: T. inicial)   -> 0–20%
+  //   2) Aplicación (turbina+dosf+tolva, POR CONTEO HALL)          -> 20–85%
+  //   3) Limpieza final (solo turbina, POR TIEMPO: T. final)       -> 85–100%
+  let pct = 0
+  if(ds==='warmup'){
+    const f = overlay.warmupMs>0 ? Math.min(elapsed/overlay.warmupMs,1) : 0
+    pct = Math.round(f*20)
+  } else if(ds==='dosing'){
+    pct = 20 + Math.round(hallFrac*65)
+  } else if(ds==='cleaning'){
+    const f = overlay.cleanMs>0 ? Math.min(elapsed/overlay.cleanMs,1) : 0
+    pct = 85 + Math.round(f*15)
+  } else if(ds==='idle'){ pct = 100 }
+  $('ovBarFill').style.width = pct+'%'
+  $('cpct').textContent = pct+'%'
+  $('csub').textContent = ds==='dosing' ? 'por conteo hall' : (ds==='idle' ? 'ciclo terminado' : 'por tiempo')
+  // tiempos grandes: transcurrido real y estimado total del ciclo
+  const trans = overlay.cycleStart ? (Date.now()-overlay.cycleStart)/1000 : 0
+  $('ovElapsed').textContent = trans.toFixed(1)+' s'
+  const cad = (calResults[dose.retardo] && calResults[dose.retardo].avg!=null) ? calResults[dose.retardo].avg : dose.retardo
+  const est = cad>0 && overlay.target>0 ? (overlay.warmupMs + overlay.target*cad + overlay.cleanMs)/1000 : 0
+  $('ovTotal').textContent = est>0 ? est.toFixed(1)+' s' : '—'
+  const labels = {
+    warmup:'1 · Limpieza inicial', dosing:'2 · Aplicación', cleaning:'3 · Limpieza final', idle:'Completado',
+  }
+  $('stageLabel').textContent = labels[ds] || 'Preparando…'
+  $('stageSub').textContent =
+    ds==='warmup' ? ('solo turbina · limpia el ducto · '+Math.max(0, Math.ceil((overlay.warmupMs-elapsed)/1000))+' s') :
+    ds==='dosing' ? ('turbina + dosificador + tolva · '+done+' / '+overlay.target+' pulsos · '+(done*2)+' g') :
+    ds==='cleaning' ? ('solo turbina · expulsa el residual · '+Math.max(0, Math.ceil((overlay.cleanMs-elapsed)/1000))+' s') : '—'
+  paintBars(document.querySelectorAll('#ovBars .sb'), ds)
+  if(state.fault){ const w=$('ovWarn'); w.style.display='block'; w.textContent = '⚠ '+(state.fault.code==='JAM'?'Atasco: revisar piñón/gránulos':'Sensor hall no detectado') }
+}
+function renderEvents(){
+  const host = $('eventList')
+  if(session.events.length===0){ host.innerHTML='<div class="muted" style="font-size:12px">Aún no hay aplicaciones.</div>'; return }
+  host.innerHTML = session.events.slice(0,8).map(ev=>{
+    const icon = ev.result==='ok'?'&#128167;':(ev.result==='partial'?'&#9208;':'&#9888;')
+    const geo = ev.gps_available?('GPS '+ev.lat.toFixed(4)+', '+ev.lon.toFixed(4)):(ev.last_known_lat?'sin señal (últ. punto)':'sin ubicación')
+    const badge = ev.result==='ok'?'g':(ev.result==='partial'?'a':'r')
+    const teo = ev.gramsTeo!=null ? ev.gramsTeo : ev.grams
+    const real = ev.gramsReal!=null ? ev.gramsReal : ev.grams
+    return `<div class="listitem"><div class="dw">${icon}</div><div style="flex:1"><div style="font-weight:600;font-size:12.5px">${teo} g teóricos <span style="color:#2f8a34">→ ${real} g reales</span></div><div class="muted" style="font-size:11px">${geo}</div></div><span class="chip ${badge}"><span class="d"></span>${ev.result}</span></div>`
+  }).join('')
+}
+// ---------- mapa Leaflet (satelital si hay internet; la lista siempre funciona) ----------
+let leafMap = null, leafLayer = null
+function initLeafMap(){
+  const host = $('leafmap')
+  if(typeof L === 'undefined'){
+    host.innerHTML = '<div style="padding:18px;text-align:center;color:#6b7280;font-size:11.5px">El fondo del mapa requiere internet.<br/>Los puntos siguen abajo en la lista y en el GeoJSON.</div>'
+    return
+  }
+  if(!leafMap){
+    leafMap = L.map('leafmap',{zoomControl:true,attributionControl:false}).setView([4.2947,-72.748],16)
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19}).addTo(leafMap)
+    leafLayer = L.layerGroup().addTo(leafMap)
+  }
+  syncLeafMarkers()
+  setTimeout(()=>leafMap.invalidateSize(), 80)
+}
+function syncLeafMarkers(){
+  if(!leafMap || !leafLayer) return
+  leafLayer.clearLayers()
+  const pts = []
+  session.events.forEach(ev=>{
+    const c = ev.gps_available?[ev.lat,ev.lon]:[ev.last_known_lat,ev.last_known_lon]
+    if(c[0]==null) return
+    pts.push(c)
+    L.circleMarker(c,{radius:7,color:'#fff',weight:2,fillColor:ev.gps_available?'#E8721C':'#c2c8d2',fillOpacity:1})
+      .addTo(leafLayer).bindPopup(ev.grams+' g · '+ev.result)
+  })
+  if(pts.length) leafMap.setView(pts[0], leafMap.getZoom())
+}
+
+function renderMap(){
+  const evs = session.events
+  $('mapCount').textContent = evs.length+' puntos'
+  if(current==='mapa') syncLeafMarkers()
+  $('mapList').innerHTML = evs.length===0 ? '<div class="card"><div class="muted" style="font-size:12px">Sin aplicaciones registradas.</div></div>' :
+    '<div class="card">'+evs.slice(0,10).map(ev=>{
+      const c = ev.gps_available?[ev.lat,ev.lon]:[ev.last_known_lat,ev.last_known_lon]
+      const color = ev.gps_available?'#E8721C':'#c2c8d2'
+      const txt = c[0]!=null ? c[0].toFixed(5)+', '+c[1].toFixed(5) : 'sin ubicación'
+      return `<div class="listitem"><span style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0"></span><div style="flex:1;font-size:12px">${txt}</div><span class="muted" style="font-size:11px">${ev.grams} g</span></div>`
+    }).join('')+'</div>'
+}
+function renderAlerts(){
+  $('alertCount').textContent = alerts.length? (alerts.length+' alerta'+(alerts.length>1?'s':'')) : 'Sin alertas'
+  const host=$('alertList')
+  host.innerHTML = alerts.length===0 ? '<div class="muted" style="font-size:12px">Sin alertas.</div>' :
+    alerts.slice(0,10).map(a=>`<div class="listitem"><div class="dw" style="background:#fdecec">&#9888;</div><div style="flex:1"><div style="font-weight:700;font-size:13px">${a.msg}</div><div class="muted" style="font-size:11px">${fmt(a.ts)}</div></div><span class="chip r"><span class="d"></span>${a.sev}</span></div>`).join('')
+}
+
+function fmt(ts){ if(!ts) return '—'; const d=new Date(ts); return d.getHours()+':'+String(d.getMinutes()).padStart(2,'0') }
+function log(s){ const t=$('term'); const d=document.createElement('div'); d.textContent=s; t.appendChild(d); if(t.children.length>200)t.removeChild(t.firstChild); t.scrollTop=t.scrollHeight }
+
+// ---------- wiring ----------
+function newTracker(){ tracker = new DoseTracker({ device_serial: $('serialTxt').textContent!=='—'?$('serialTxt').textContent:'DOSAPALM-50083', session_id: 's-'+Date.now(), operator_id: profile==='admin'?'op-admin':'op-lider' }) }
+
+$('btnConnect').onclick = connect
+$('btnBle').onclick = connectBle
+// ---------- Pruebas: radios del equipo (Bluetooth / Wi-Fi, excluyentes) ----------
+let connChan = null   // 'ble' | 'wifi' | null (desconocido hasta conectar)
+function renderConnSw(){
+  document.querySelectorAll('[data-connsw]').forEach(sw=> sw.classList.toggle('on', connChan===sw.dataset.connsw))
+}
+document.querySelectorAll('[data-connsw]').forEach(sw=> sw.addEventListener('click', ()=>{
+  const c = sw.dataset.connsw
+  if(transport==='none'){ log('!! Conecta el equipo primero para cambiarle la radio'); return }
+  if(connChan===c){ log('!! '+(c==='ble'?'Bluetooth':'Wi-Fi')+' ya está habilitado; para apagarlo habilita el otro canal'); return }
+  connChan = c
+  send(cmd.conn(c))
+  pushAlert('Radio del equipo cambiada a '+(c==='ble'?'Bluetooth':'Wi-Fi')+'. La conexión actual puede caerse: reconecta por el canal nuevo.','info')
+  renderConnSw()
+}))
+renderConnSw()
+// ---------- login con contraseña por perfil ----------
+let loginSel = 'operador'
+document.querySelectorAll('.profsel').forEach(c=> c.addEventListener('click', ()=>{
+  loginSel = c.dataset.prof
+  document.querySelectorAll('.profsel').forEach(x=> x.classList.toggle('sel', x===c))
+  $('loginErr').style.display='none'
+  $('loginPw').focus()
+}))
+$('profOp').classList.add('sel')  // preseleccionado: el perfil de uso diario
+
+function applyProfileUi(){
+  const admin = profile==='admin'
+  // La vista Dosificar es IDÉNTICA para ambos perfiles (todos los parámetros editables)
+  $('advFields').style.display = ''
+  $('opSummary').style.display = 'none'
+  // Vincular QR: solo Administrador (el acceso desde Dispositivos también)
+  $('btnGoVincular').style.display = admin ? '' : 'none'
+  $('pwOperCard').style.display = admin ? '' : 'none'
+  $('pfName').textContent = admin ? 'Administrador' : 'Operador'
+  $('pfIcon').innerHTML = admin ? '&#9881;' : '&#128100;'
+  $('perfilSub').textContent = admin ? 'Administrador' : 'Operador'
+}
+function doLogin(){
+  if($('loginPw').value !== getPw(loginSel)){ $('loginErr').style.display=''; return }
+  $('loginErr').style.display='none'; $('loginPw').value=''
+  profile = loginSel
+  buildTabs(); newTracker(); applyProfileUi()
+  if(transport==='none') connect()
+  go('home'); render()
+}
+$('btnLogin').onclick = doLogin
+$('loginPw').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin() })
+
+// ---------- perfil: cambio de contraseñas y salida ----------
+$('btnPwSave').onclick = ()=>{
+  const err=$('pwErr'); err.style.display='none'
+  if($('pwCur').value !== getPw(profile)){ err.textContent='La contraseña actual no coincide'; err.style.display=''; return }
+  const n=$('pwNew').value
+  if(n.length<4){ err.textContent='La nueva contraseña debe tener al menos 4 caracteres'; err.style.display=''; return }
+  if(n!==$('pwNew2').value){ err.textContent='Las contraseñas nuevas no coinciden'; err.style.display=''; return }
+  setPwStore(profile, n)
+  $('pwCur').value=$('pwNew').value=$('pwNew2').value=''
+  pushAlert('Contraseña de '+(profile==='admin'?'Administrador':'Operador')+' actualizada','info')
+  log('== Contraseña de '+profile+' actualizada ==')
+}
+$('btnPwOperSave').onclick = ()=>{
+  const err=$('pwOperErr'); err.style.display='none'
+  const n=$('pwOperNew').value
+  if(n.length<4){ err.textContent='Mínimo 4 caracteres'; err.style.display=''; return }
+  setPwStore('operador', n); $('pwOperNew').value=''
+  pushAlert('Contraseña del Operador restablecida','info')
+  log('== Contraseña del Operador restablecida por el Administrador ==')
+}
+$('btnLogout').onclick = ()=>{ go('login'); $('loginPw').value='' }
+$('sLogout').onclick = ()=>{ go('login'); $('loginPw').value='' }
+
+$('devRow').onclick = ()=> go('home')
+document.querySelectorAll('[data-go]').forEach(el=> el.addEventListener('click', ()=> go(el.dataset.go)))
+function changeDosis(delta){
+  dose.dosis = Math.max(0, dose.dosis + delta)
+  saveDose(); liveApply(cmd.dosis(dosisComando())); render()
+}
+$('dMinus').onclick = ()=> changeDosis(-1)
+$('dPlus').onclick = ()=> changeDosis(1)
+
+// ---------- parámetros editables (solo Admin) ----------
+// El selector de retardo de Dosificar solo ofrece los retardos CALIBRADOS en
+// Pruebas (con duty medido). Los demás aparecen en gris y no son seleccionables.
+function renderRetardoOptions(){
+  const html = RETARDOS.map(v=>{
+    const r = calResults[v]
+    const cal = !!(r && r.dutyPct!=null)
+    const label = v===0 ? '0 — sin control (velocidad fija)' : v+' ms por cavidad'
+    return `<option value="${v}"${cal?'':' disabled style="color:#9aa1ad"'}>${label}${cal?' · '+r.dutyPct+'%':' — sin calibrar'}</option>`
+  }).join('')
+  const sel = $('inRetardo')
+  sel.innerHTML = html
+  sel.value = dose.retardo
+  // el card de la vista Sencilla usa el mismo listado
+  $('dumRet').innerHTML = html
+  $('dumRet').value = dose.retardo
+}
+// % de pérdida de la manguera: recalcula el hint en vivo con cada tecla
+$('inPerdida').addEventListener('input', ()=>{
+  dose.perdida = Math.min(90, Math.max(0, parseInt($('inPerdida').value||'0',10)||0))
+  saveDose(); liveApply(cmd.dosis(dosisComando())); render()
+})
+// ---------- Configuración: tabla de pérdidas calibradas por seteo ----------
+$('pdRet').innerHTML = RETARDOS.filter(v=>v>0).map(v=>`<option value="${v}">${v} ms</option>`).join('')
+$('pdRet').value = '500'
+// la turbina del seteo se elige entre las VELOCIDADES guardadas (m/s)
+function turbEnMs(pct){ const e=turbVel.find(x=> x.pct===pct); return e ? e.ms+' m/s' : pct+'%' }
+function renderPdTurbOptions(){
+  const sel = $('pdTurb')
+  const prev = sel.value
+  const ordenadas = turbVel.slice().sort((a,b)=>a.ms-b.ms)
+  sel.innerHTML = ordenadas.length===0
+    ? '<option value="" disabled>— guarda velocidades primero</option>'
+    : ordenadas.map(e=>`<option value="${e.pct}">${e.ms} m/s</option>`).join('')
+  if(ordenadas.some(e=> String(e.pct)===prev)) sel.value = prev
+}
+function renderPerdList(){
+  const activo = perdidaCalibrada()
+  $('perdList').innerHTML = perdidas.length===0
+    ? '<div class="muted" style="font-size:12px">Sin pérdidas calibradas todavía.</div>'
+    : '<div class="row" style="font-size:10px;color:var(--muted2);text-transform:uppercase;margin-bottom:2px"><span style="flex:1">Turbina</span><span style="flex:1">Retardo</span><span style="flex:1">Pérdida</span><span style="width:20px"></span></div>'+
+      perdidas.slice().sort((a,b)=> a.turb-b.turb || a.ret-b.ret).map(e=>{
+        const enUso = activo===e
+        return `<div class="row" style="font-size:12px;padding:5px 0;border-top:1px solid var(--line)${enUso?';background:#fff8f2':''}">`+
+          `<span style="flex:1;font-weight:700">${turbEnMs(e.turb)}${enUso?' <span class="muted" style="font-size:9px">(en uso)</span>':''}</span>`+
+          `<span style="flex:1">${e.ret} ms</span>`+
+          `<span style="flex:1;font-weight:700">${e.per}%</span>`+
+          `<button data-pddel="${e.turb}|${e.ret}" title="Eliminar" style="width:20px;height:24px;border:none;background:none;color:#c0392b;font-size:13px;font-weight:700;cursor:pointer">✕</button>`+
+        `</div>`
+      }).join('')
+  document.querySelectorAll('[data-pddel]').forEach(b=> b.addEventListener('click', ()=>{
+    const [t,r] = b.dataset.pddel.split('|').map(Number)
+    perdidas = perdidas.filter(e=> !(e.turb===t && e.ret===r))
+    savePerdidas(); renderPerdList(); render()
+  }))
+}
+$('pdSave').onclick = ()=>{
+  if(!$('pdTurb').value){ pushAlert('Primero guarda velocidades de turbina (m/s) en la tarjeta de abajo','warn'); return }
+  const t = Math.min(100, Math.max(0, parseInt($('pdTurb').value,10)||0))
+  const r = parseInt($('pdRet').value,10)
+  const p = Math.min(90, Math.max(0, parseInt($('pdPer').value||'0',10)||0))
+  const ex = perdidas.find(e=> e.turb===t && e.ret===r)
+  if(ex) ex.per = p; else perdidas.push({turb:t, ret:r, per:p})
+  savePerdidas()
+  syncPerdida(); saveDose()
+  pushAlert('Pérdida calibrada: turbina '+turbEnMs(t)+' · '+r+' ms → '+p+'% de pérdida','info')
+  renderPerdList(); render()
+}
+renderPerdList()
+syncPerdida()
+// ---------- Pruebas: velocidades de turbina calibradas (m/s) ----------
+function renderTurbVel(){
+  renderTurbVelOptions()   // el selector m/s de Dosificar refleja lo calibrado
+  renderPdTurbOptions()    // y el de la tarjeta de pérdidas también
+  renderPerdList()         // la tabla de pérdidas muestra la turbina en m/s
+  if(window.__dumReady) renderDumVel()   // y el card de Velocidad de la vista Sencilla
+  $('tvList').innerHTML = turbVel.length===0
+    ? '<div class="muted" style="font-size:12px">Sin velocidades calibradas todavía.</div>'
+    : '<div class="row" style="font-size:10px;color:var(--muted2);text-transform:uppercase;margin-bottom:2px"><span style="flex:1">Turbina</span><span style="flex:1">Velocidad</span><span style="flex:1">Alt. palma</span><span style="width:42px"></span></div>'+
+      turbVel.slice().sort((a,b)=>a.pct-b.pct).map(e=>{
+        const enUso = e.pct===dose.turb
+        return `<div class="row" style="font-size:12px;padding:5px 0;border-top:1px solid var(--line)${enUso?';background:#fff8f2':''}">`+
+          `<span style="flex:1;font-weight:700">${e.pct}%${enUso?' <span class="muted" style="font-size:9px">(en uso)</span>':''}</span>`+
+          `<span style="flex:1;font-weight:700">${e.ms} m/s</span>`+
+          `<span style="flex:1">${e.alt!=null ? e.alt+' m' : '—'}</span>`+
+          `<button data-tvedit="${e.pct}" title="Editar esta fila" style="width:20px;height:24px;border:none;background:none;color:#3d6db5;font-size:13px;cursor:pointer">✎</button>`+
+          `<button data-tvdel="${e.pct}" title="Eliminar" style="width:20px;height:24px;margin-left:2px;border:none;background:none;color:#c0392b;font-size:13px;font-weight:700;cursor:pointer">✕</button>`+
+        `</div>`
+      }).join('')
+  document.querySelectorAll('[data-tvdel]').forEach(b=> b.addEventListener('click', ()=>{
+    turbVel = turbVel.filter(e=> e.pct!==Number(b.dataset.tvdel))
+    saveTurbVel(); renderTurbVel(); render()
+  }))
+  // ✎ carga la fila en los campos: se corrige y se vuelve a Guardar
+  document.querySelectorAll('[data-tvedit]').forEach(b=> b.addEventListener('click', ()=>{
+    const e = turbVel.find(x=> x.pct===Number(b.dataset.tvedit))
+    if(!e) return
+    $('tvPct').value = e.pct
+    $('tvMs').value = e.ms
+    $('tvAlt').value = e.alt!=null ? e.alt : ''
+    $('tvMs').focus()
+  }))
+}
+$('tvSave').onclick = ()=>{
+  const pct = Math.min(100, Math.max(0, parseInt($('tvPct').value||'0',10)||0))
+  const ms = Math.min(30, Math.max(5, parseFloat($('tvMs').value||'0')||0))
+  const altRaw = parseFloat($('tvAlt').value)
+  const alt = isNaN(altRaw) ? null : Math.min(30, Math.max(0, altRaw))
+  const ex = turbVel.find(e=> e.pct===pct)
+  if(ex){ ex.ms = ms; ex.alt = alt } else turbVel.push({pct, ms, alt})
+  saveTurbVel()
+  pushAlert('Velocidad de turbina calibrada: '+pct+'% → '+ms+' m/s'+(alt!=null?' · palma '+alt+' m':''),'info')
+  renderTurbVel(); render()
+}
+renderTurbVel()
+// ---------- Pruebas: piñones dosificadores ----------
+function renderPinonOptions(){
+  const sel = $('inPinon')
+  sel.innerHTML = pinones.map(p=>`<option value="${p.name}">${p.name} — ${p.cav} cav · ${p.gcav} g</option>`).join('')
+  sel.value = pinonActivo().name
+}
+function renderPnList(){
+  renderPinonOptions()
+  const activo = pinonActivo()
+  $('pnList').innerHTML = pinones.length===0
+    ? '<div class="muted" style="font-size:12px">Sin piñones registrados.</div>'
+    : '<div class="row" style="font-size:10px;color:var(--muted2);text-transform:uppercase;margin-bottom:2px"><span style="flex:1.2">Piñón</span><span style="flex:1">Cavidades</span><span style="flex:1">g/cavidad</span><span style="width:20px"></span></div>'+
+      pinones.map(p=>{
+        const enUso = p===activo
+        return `<div class="row" style="font-size:12px;padding:5px 0;border-top:1px solid var(--line)${enUso?';background:#fff8f2':''}">`+
+          `<span style="flex:1.2;font-weight:700">${p.name}${enUso?' <span class="muted" style="font-size:9px">(en uso)</span>':''}</span>`+
+          `<span style="flex:1">${p.cav}</span>`+
+          `<span style="flex:1;font-weight:700">${p.gcav} g</span>`+
+          `<button data-pndel="${p.name}" title="Eliminar" style="width:20px;height:24px;border:none;background:none;color:#c0392b;font-size:13px;font-weight:700;cursor:pointer">✕</button>`+
+        `</div>`
+      }).join('')
+  document.querySelectorAll('[data-pndel]').forEach(b=> b.addEventListener('click', ()=>{
+    if(pinones.length<=1){ pushAlert('Debe quedar al menos un piñón registrado','warn'); return }
+    pinones = pinones.filter(p=> p.name!==b.dataset.pndel)
+    savePinones(); renderPnList(); render()
+  }))
+}
+$('pnSave').onclick = ()=>{
+  const name = ($('pnName').value||'').trim() || ('Piñón '+(pinones.length+1))
+  const cav = Math.min(60, Math.max(1, parseInt($('pnCav').value||'10',10)||10))
+  const gcav = Math.min(20, Math.max(0.5, parseFloat($('pnGcav').value||'2')||2))
+  const ex = pinones.find(p=> p.name===name)
+  if(ex){ ex.cav=cav; ex.gcav=gcav } else pinones.push({name, cav, gcav})
+  savePinones()
+  pushAlert('Piñón guardado: '+name+' — '+cav+' cavidades · '+gcav+' g/cavidad','info')
+  renderPnList(); render()
+}
+$('inPinon').addEventListener('change', ()=>{
+  dose.pinon = $('inPinon').value
+  saveDose(); liveApply(cmd.dosis(dosisComando())); render(); renderPnList()
+})
+renderPnList()
+// La turbina en Dosificar se elige por VELOCIDAD (m/s) calibrada en Pruebas;
+// el % de duty asociado viaja por debajo (value de cada opción).
+function renderTurbVelOptions(){
+  const sel = $('inTurbVel')
+  const ordenadas = turbVel.slice().sort((a,b)=>a.ms-b.ms)
+  let html = ordenadas.map(e=>`<option value="${e.pct}">${e.ms} m/s · ${e.pct}%</option>`).join('')
+  if(ordenadas.length===0){
+    html = `<option value="${dose.turb}" disabled>— sin velocidades calibradas (Configuración)</option>`
+  } else if(!ordenadas.some(e=> e.pct===dose.turb)){
+    html = `<option value="${dose.turb}" disabled style="color:#9aa1ad">— seteo actual sin m/s calibrado</option>` + html
+  }
+  sel.innerHTML = html
+  sel.value = String(dose.turb)
+}
+$('inTurbVel').addEventListener('change', ()=>{
+  dose.turb = parseInt($('inTurbVel').value,10)||0
+  syncPerdida(); renderPerdList(); renderTurbVel()   // pérdida y m/s dependen de la turbina
+  saveDose(); liveApply(cmd.motor('turb', dose.turb), cmd.dosis(dosisComando())); render()
+})
+;[['inTini','tini',0,20000],['inTfin','tfin',0,20000]].forEach(([id,key,min,max])=>{
+  $(id).addEventListener('change', ()=>{
+    const v=Math.max(min,Math.min(max,parseInt($(id).value||'0',10)||0))
+    dose[key]=v; $(id).value=v
+    saveDose(); liveApply(key==='tini' ? cmd.tini(v) : cmd.tfin(v)); render()
+  })
+})
+$('inRetardo').addEventListener('change', ()=>{
+  dose.retardo=parseInt($('inRetardo').value,10)
+  send(cmd.retardo(dose.retardo))
+  // el retardo calibrado viaja con SU duty constante (v8.8)
+  const r = calResults[dose.retardo]
+  dose.dutyFijo = (r && r.dutyPct!=null) ? r.dutyPct : 0
+  send(cmd.dutyFijo(dose.dutyFijo))
+  syncPerdida()   // y con la pérdida calibrada del seteo, si existe
+  saveDose(); render(); renderCalResults(); renderPerdList()
+})
+
+// v9.1: sin botón "Aplicar" — cada cambio se envía al equipo AL INSTANTE.
+function liveApply(){
+  if(transport==='none') return
+  for(const c of arguments) send(c)
+}
+$('btnDosificar').onclick = ejecutar
+// Parar SIEMPRE cierra la ventana del ciclo, responda o no el equipo.
+$('btnParar').onclick = ()=>{ send(cmd.parar()); closeOverlay(); render() }
+$('btnSession').onclick = ()=>{
+  if(session.active){ session.active=false }
+  else { session.active=true; session.applications=0; session.grams=0; session.gramsReal=0; session.events=[]; session.startedAt=Date.now(); newTracker() }
+  render()
+}
+$('btnExport').onclick = ()=>{
+  const feats = session.events.map(ev=>{ const c = ev.gps_available?[ev.lon,ev.lat]:[ev.last_known_lon,ev.last_known_lat]; return c[0]==null?null:({type:'Feature',geometry:{type:'Point',coordinates:c},properties:{grams:ev.grams,result:ev.result,id:ev.id}}) }).filter(Boolean)
+  const blob = new Blob([JSON.stringify({type:'FeatureCollection',features:feats},null,2)],{type:'application/geo+json'})
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='dosapalm-recorrido.geojson'; a.click()
+}
+
+// ---------- wiring vista Pruebas (admin) ----------
+// selector de retardos entre cavidades
+$('retSel').innerHTML = RETARDOS.map(v=>`<span class="retchip" data-v="${v}">${v} ms</span>`).join('')
+document.querySelectorAll('#retSel .retchip').forEach(c=> c.addEventListener('click', ()=>{
+  dose.retardo = Number(c.dataset.v)
+  send(cmd.retardo(dose.retardo))
+  syncPerdida()
+  saveDose()
+  render(); renderPerdList()
+}))
+// segmento de modo
+document.querySelectorAll('#pSeg div').forEach(d=> d.addEventListener('click', ()=> send(cmd.modo(d.dataset.m))))
+// Las pruebas requieren modo PRUEBA: en modo real `turb X` solo guarda la
+// velocidad para la dosificación (no mueve el motor) y sin modo la tarjeta
+// rechaza todo. Si hace falta, se cambia el modo y luego va el comando.
+function sendPrueba(c){
+  if(state.mode!=='PRUEBA'){
+    log('!! Prueba de motores: cambiando a `modo prueba` primero')
+    send(cmd.modo('prueba'))
+    setTimeout(()=>send(c), 500)
+  } else send(c)
+}
+// sliders de motores: al soltar, envían el comando
+;[['pTurb','turb'],['pDosf','dosf'],['pTol','tol']].forEach(([id,motor])=>{
+  const el = $(id)
+  el.addEventListener('input', ()=>{ $(id+'V').textContent = el.value })
+  el.addEventListener('change', ()=>{
+    let v = Number(el.value)
+    // Calibración de campo: piso operativo del dosificador (DOSF_PCT_MIN). O apagado, o >= piso.
+    if(motor==='dosf' && v>0 && v<DOSF_PCT_MIN){
+      v = DOSF_PCT_MIN
+      el.value = v; $(id+'V').textContent = v
+      log('!! Dosificador: mínimo operativo '+DOSF_PCT_MIN+'% (calibración de campo) — ajustado')
+    }
+    // v8.9: la turbina llega al 100%, pero por encima del 78% se avisa
+    if(motor==='turb' && v>78){
+      log('!! Turbina al '+v+'%: por encima del máximo recomendado (78%)')
+    }
+    sendPrueba(cmd.motor(motor, v))
+  })
+})
+// botón Máx/Off por motor
+document.querySelectorAll('[data-mtog]').forEach(b=> b.addEventListener('click', ()=>{
+  const motor = b.dataset.mtog
+  const cur = { turb:state.turb, dosf:state.dosf, tol:state.tol }[motor]
+  sendPrueba(cmd.motor(motor, cur>0 ? 0 : 100))
+}))
+// LEDs y salidas
+document.querySelectorAll('.sw[data-led]').forEach(sw=> sw.addEventListener('click', ()=>{
+  const which = sw.dataset.led
+  const leds = { r:state.ledR, b:state.ledB, g:state.ledG, all:state.ledR&&state.ledG&&state.ledB }
+  send(cmd.led(which, !leds[which]))
+}))
+document.querySelectorAll('.sw[data-out]').forEach(sw=> sw.addEventListener('click', ()=>{
+  const out = sw.dataset.out
+  const on = out==='aux' ? !state.aux : !state.ld
+  send(out==='aux' ? cmd.aux(on) : cmd.ld(on))
+}))
+// ---------- constructor de ciclos (persiste en el dispositivo) ----------
+let seqSteps = [
+  {m:'turb', pct:40, ms:2500},
+  {m:'dosf', pct:60, ms:4000},
+  {m:'dosf', pct:0,  ms:200},
+  {m:'turb', pct:40, ms:3500},
+]
+let savedSeqs = {}
+try{ savedSeqs = JSON.parse(localStorage.getItem('dp_seqs')||'{}') }catch(e){}
+function saveSeqs(){ try{ localStorage.setItem('dp_seqs', JSON.stringify(savedSeqs)) }catch(e){} }
+function encodeSteps(steps){ return encodeSeq(steps.map(s=>({motor:s.m, pct:s.pct, ms:s.ms}))) }
+/** Calibración de campo: ningún paso puede dejar el dosificador entre 1% y 59%. */
+function normalizeSteps(){
+  let ajustado = false
+  seqSteps.forEach(s=>{ if(s.m==='dosf' && s.pct>0 && s.pct<DOSF_PCT_MIN){ s.pct=DOSF_PCT_MIN; ajustado=true } })
+  if(ajustado){
+    renderSteps()
+    log('!! Pasos del dosificador bajo el '+DOSF_PCT_MIN+'% ajustados al mínimo operativo (calibración de campo)')
+  }
+}
+function renderSteps(){
+  const host=$('stepList'); host.innerHTML=''
+  seqSteps.forEach((s,idx)=>{
+    const row=document.createElement('div'); row.className='steprow'
+    row.innerHTML =
+      `<select data-k="m"><option value="turb">Turbina</option><option value="dosf">Dosificador</option><option value="tol">Tolva</option></select>`+
+      `<input type="number" data-k="pct" value="${s.pct}" min="0" max="100" style="width:60px"/><span class="muted" style="font-size:11px">%</span>`+
+      `<input type="number" data-k="ms" value="${s.ms}" min="0" step="100" style="width:76px"/><span class="muted" style="font-size:11px">ms</span>`+
+      `<span class="del">&#10005;</span>`
+    row.querySelector('[data-k=m]').value = s.m
+    row.querySelector('[data-k=m]').addEventListener('change', function(){ s.m=this.value })
+    row.querySelector('[data-k=pct]').addEventListener('input', function(){ s.pct=parseInt(this.value||'0',10)||0 })
+    row.querySelector('[data-k=ms]').addEventListener('input', function(){ s.ms=parseInt(this.value||'0',10)||0 })
+    row.querySelector('.del').addEventListener('click', ()=>{ seqSteps.splice(idx,1); renderSteps() })
+    host.appendChild(row)
+  })
+}
+function renderSavedSeqs(){
+  const host=$('savedSeqs'); host.innerHTML=''
+  Object.keys(savedSeqs).forEach(name=>{
+    const b=document.createElement('span'); b.className='seqbadge'; b.title=savedSeqs[name]
+    b.innerHTML=`<span class="run">&#9654; ${name}</span><span class="rm">&#10005;</span>`
+    b.querySelector('.run').addEventListener('click', ()=> sendPrueba('seq run '+savedSeqs[name]))
+    b.querySelector('.rm').addEventListener('click', ()=>{ delete savedSeqs[name]; saveSeqs(); renderSavedSeqs() })
+    host.appendChild(b)
+  })
+}
+$('addStep').onclick = ()=>{ seqSteps.push({m:'turb', pct:30, ms:1000}); renderSteps() }
+$('runSeq').onclick = ()=>{ if(seqSteps.length){ normalizeSteps(); sendPrueba('seq run '+encodeSteps(seqSteps)) } }
+$('saveSeq').onclick = ()=>{
+  if(!seqSteps.length) return
+  normalizeSteps()
+  const name=($('seqName').value.trim()||('ciclo'+(Object.keys(savedSeqs).length+1)))
+  savedSeqs[name] = encodeSteps(seqSteps)
+  saveSeqs(); renderSavedSeqs(); $('seqName').value=''
+  pushAlert('Ciclo "'+name+'" guardado','info')
+}
+renderSteps(); renderSavedSeqs()
+
+// ---------- MON configurable ----------
+const MONVARS=['turb','dosf','tol','hall','btn','gps','ble','seq']
+$('monVars').innerHTML = MONVARS.map(v=>`<span class="retchip on" data-v="${v}">${v}</span>`).join('')
+document.querySelectorAll('#monVars .retchip').forEach(c=> c.addEventListener('click', ()=> c.classList.toggle('on')))
+$('monSw').addEventListener('click', function(){ const on=!this.classList.contains('on'); this.classList.toggle('on',on); send(cmd.mon(on)) })
+$('monApply').onclick = ()=>{
+  send(cmd.monSet(Math.max(1,parseInt($('monSeg').value||'5',10))))
+  const vars=[...document.querySelectorAll('#monVars .retchip.on')].map(c=>c.dataset.v)
+  if(vars.length) send(cmd.monVars(vars))
+}
+
+// ---------- calibración del retardo (por punto y general) ----------
+// Cada punto: `calibrar` mueve SOLO el dosificador (5 cavidades) con el lazo → se mide el
+// intervalo real entre lecturas del hall → resultado persistente. "Usar"
+// aplica el retardo calibrado como configuración de trabajo de la máquina.
+let calMeasureTarget = null
+const calState = { active:false, queue:[], current:null, total:0, timer:null, ackTimer:null, started:false }
+let calResults = {}
+try{ calResults = JSON.parse(localStorage.getItem('dp_cal')||'{}') }catch(e){}
+function saveCalResults(){ try{ localStorage.setItem('dp_cal', JSON.stringify(calResults)) }catch(e){} }
+
+$('calPoint').innerHTML = RETARDOS.filter(v=>v>0).map(v=>`<option value="${v}">${v} ms/cav</option>`).join('')
+// El select ES el objetivo: al cambiarlo, la gráfica y la desviación se recalculan.
+$('calPoint').addEventListener('change', ()=> render())
+// Tiempo de calibración por punto: se convierte en cavidades según el retardo
+// objetivo (p.ej. 5 s a 200 ms ≈ 25 cavidades). Mínimo 2, tope 50.
+$('calSecs').innerHTML = [2,5,10,20].map(s=>`<option value="${s}"${s===5?' selected':''}>${s} s de medición</option>`).join('')
+function calPulsesFor(retardoMs){
+  const secs = Number($('calSecs').value||5)
+  return Math.max(2, Math.min(50, Math.round(secs*1000/retardoMs)))
+}
+
+function calMsg(txt){ $('calSweepMsg').textContent = txt }
+function startCal(points){
+  if(transport==='none'){ calMsg('⚠ Conecta el equipo primero (Wi-Fi o Bluetooth).'); return }
+  if(calRunOn){ calMsg('Apaga primero el modo continuo (botón de abajo).'); return }
+  if(calState.active) return
+  calState.active = true
+  calState.queue = points.slice()
+  calState.total = points.length
+  $('calCancel').style.display=''
+  $('calRun').disabled = true; $('calSweepBtn').disabled = true
+  runNextCalPoint()
+}
+function runNextCalPoint(){
+  clearTimeout(calState.timer)
+  const p = calState.queue.shift()
+  if(p===undefined){ finishCal('✓ Calibración terminada: '+calState.total+(calState.total>1?' puntos medidos.':' punto medido.')); return }
+  calState.current = p
+  calState.started = false
+  calState.modeRetry = false
+  calMeasureTarget = p
+  hallCal.length = 0
+  const pulsos = calPulsesFor(p)
+  calState.pulses = pulsos
+  calMsg('Midiendo '+p+' ms ('+pulsos+' cavidades) · punto '+(calState.total-calState.queue.length)+' de '+calState.total+' · solo dosificador…')
+  // `calibrar` mueve ÚNICAMENTE el motor dosificador con el lazo de control
+  // activo; la turbina y la tolva quedan apagadas.
+  send(cmd.calibrar(p, pulsos))
+  // Si el equipo NO CONFIRMA el arranque en 4 s: conexión caída o firmware viejo.
+  calState.ackTimer = setTimeout(()=>{
+    if(calState.active && !calState.started){
+      abortCal('⚠ El equipo no respondió a `calibrar`. Si el terminal dice "Comando desconocido", la tarjeta tiene el firmware anterior: hay que flashear el v8 actualizado.')
+    }
+  }, 4000)
+  // Y si arrancó pero no termina en el tiempo esperado ×3 + margen: abortar.
+  const secs = Number($('calSecs').value||5)
+  clearTimeout(calState.timer)
+  calState.timer = setTimeout(()=> abortCal('⚠ El punto de '+p+' ms no terminó a tiempo. Revisa el equipo (¿atasco?).'), secs*3000+15000)
+  render()
+}
+function onCalDoseDone(dutyPct, valid){
+  clearTimeout(calState.timer)
+  const p = calState.current
+  const gapMax = Math.max(2000, p*4)
+  const iv=[]
+  for(let i=1;i<hallCal.length;i++){ const d=hallCal[i]-hallCal[i-1]; if(d>0 && d<=gapMax) iv.push(d) }
+  if(iv.length===0){
+    calResults[p] = { avg:null, dev:null, dutyPct: dutyPct??null, valid: valid??null, at:Date.now() }
+  } else {
+    const avg = Math.round(iv.reduce((a,b)=>a+b,0)/iv.length)
+    calResults[p] = { avg, dev: Math.round((avg-p)/p*100), dutyPct: dutyPct??null, valid: valid??null, at:Date.now() }
+  }
+  saveCalResults(); renderCalResults()
+  setTimeout(runNextCalPoint, 1200)  // pausa corta entre puntos
+}
+function abortCal(msg){
+  clearTimeout(calState.timer)
+  clearTimeout(calState.ackTimer)
+  calState.active=false; calState.queue=[]; calState.started=false
+  $('calCancel').style.display='none'
+  $('calRun').disabled=false; $('calSweepBtn').disabled=false
+  calMsg(msg)
+}
+function finishCal(msg){ abortCal(msg); calMeasureTarget=null; render() }
+
+// v8.8: fila en reproducción continua (▶ gira el dosificador a su PWM constante)
+let calPlaying = null
+function calPlayStop(){
+  if(calPlaying==null) return
+  calPlaying = null
+  send(cmd.motor('dosf', 0))
+}
+function renderCalResults(){
+  renderRetardoOptions()   // el selector de Dosificar refleja lo calibrado
+  const keys = Object.keys(calResults).map(Number).sort((a,b)=>a-b)
+  if(keys.length===0){ $('calResults').innerHTML=''; return }
+  $('calResults').innerHTML = '<div class="card" style="padding:10px;margin-bottom:0">'+
+    '<div class="row" style="font-size:10px;color:var(--muted2);text-transform:uppercase;margin-bottom:4px"><span style="flex:1">Objetivo</span><span style="flex:1">Medido</span><span style="flex:.9">Duty</span><span style="flex:1">Desv.</span><span style="width:98px"></span></div>'+
+    keys.map(p=>{
+      const r = calResults[p]
+      const sinDatos = r.avg==null
+      const dev = r.dev
+      const estado = sinDatos ? '✗' : (Math.abs(dev)<=15 ? '✓' : (Math.abs(dev)<=30 ? '⚠' : '✗'))
+      const color = sinDatos ? '#c0392b' : (Math.abs(dev)<=15 ? '#2f8a34' : (Math.abs(dev)<=30 ? '#b9791a' : '#c0392b'))
+      const enUso = dose.retardo===p ? ' style="background:#fff8f2"' : ''
+      const playing = calPlaying===p
+      return `<div class="row"${enUso} data-calrow="${p}" style="font-size:12px;padding:5px 0;border-top:1px solid var(--line)">`+
+        `<span style="flex:1;font-weight:700">${p} ms${dose.retardo===p?' <span class="muted" style="font-size:9px">(en uso)</span>':''}</span>`+
+        `<span style="flex:1">${sinDatos?'—':r.avg+' ms'}</span>`+
+        `<span style="flex:.9;font-weight:700">${r.dutyPct!=null?r.dutyPct+'%':'—'}</span>`+
+        `<span style="flex:1;color:${color};font-weight:700">${estado} ${sinDatos?'sin datos':(dev>0?'+':'')+dev+'%'}</span>`+
+        (r.dutyPct!=null
+          ? `<button data-calplay="${p}" title="${playing?'Pausar':'Girar indefinido al '+r.dutyPct+'% constante'}" style="width:28px;height:26px;border:1px solid var(--line);border-radius:7px;background:${playing?'#12261c':'none'};color:${playing?'#cfe3d6':'#2f8a34'};font-size:11px;cursor:pointer">${playing?'&#10074;&#10074;':'&#9654;'}</button>`
+          : `<span style="width:28px"></span>`)+
+        `<button class="btn ghost" data-calapply="${p}" style="width:48px;padding:5px 0;font-size:11px;margin-left:2px">Usar</button>`+
+        `<button data-caldel="${p}" title="Eliminar esta fila" style="width:20px;height:26px;margin-left:2px;border:none;background:none;color:#c0392b;font-size:13px;font-weight:700;cursor:pointer">✕</button>`+
+      `</div>`
+    }).join('')+
+    `<div class="muted" style="font-size:10.5px;margin-top:6px">PWM de trabajo: <b>${dose.dutyFijo>0 ? dose.dutyFijo+'% constante (sin lazo)' : 'lazo automático'}</b>${dose.dutyFijo>0?' — la dosificación corre a ese duty sin variar':''}</div>`+
+    '</div>'
+  document.querySelectorAll('[data-calapply]').forEach(b=> b.addEventListener('click', ()=>{
+    const p = Number(b.dataset.calapply)
+    const r = calResults[p]
+    dose.retardo = p
+    // v8.8: el duty calibrado queda como PWM CONSTANTE de la dosificación.
+    dose.dutyFijo = r.dutyPct!=null ? r.dutyPct : 0
+    send(cmd.retardo(p))
+    send(cmd.dutyFijo(dose.dutyFijo))
+    syncPerdida()
+    saveDose()
+    pushAlert(dose.dutyFijo>0
+      ? 'Aplicado a la máquina: '+p+' ms/cavidad con PWM fijo '+dose.dutyFijo+'% (constante en la dosificación)'
+      : 'Retardo de trabajo aplicado: '+p+' ms/cavidad (sin duty calibrado: la dosificación usa el lazo)','info')
+    renderCalResults(); render(); renderPerdList()
+  }))
+  document.querySelectorAll('[data-caldel]').forEach(b=> b.addEventListener('click', ()=>{
+    const p = Number(b.dataset.caldel)
+    if(calPlaying===p) calPlayStop()
+    delete calResults[p]
+    saveCalResults(); renderCalResults(); render()
+  }))
+  document.querySelectorAll('[data-calplay]').forEach(b=> b.addEventListener('click', ()=>{
+    const p = Number(b.dataset.calplay)
+    if(calPlaying===p){
+      calPlayStop()
+      log('!! Giro continuo pausado (dosf 0)')
+    } else {
+      calPlayStop()
+      calPlaying = p
+      const pct = calResults[p].dutyPct
+      log('!! Giro continuo: dosificador al '+pct+'% CONSTANTE ('+p+' ms calibrados) — pausa con ⏸')
+      sendPrueba(cmd.motor('dosf', pct))
+    }
+    renderCalResults()
+  }))
+}
+
+$('calRun').onclick = ()=> startCal([Number($('calPoint').value)])
+$('calSweepBtn').onclick = ()=> startCal(RETARDOS.filter(v=>v>0))
+
+// ---------- frecuencia PWM por motor (v8.4, persistente en la tarjeta) ----------
+const FRECS = [500, 1000, 2000, 4000, 5000, 8000, 10000, 20000]
+let pwmFreq = { turb: 5000, dosf: 1000, tol: 1000 }
+try{ Object.assign(pwmFreq, JSON.parse(localStorage.getItem('dp_freq')||'{}')) }catch(e){}
+;[['fqTurb','turb'],['fqDosf','dosf'],['fqTol','tol']].forEach(([id,motor])=>{
+  $(id).innerHTML = FRECS.map(f=>`<option value="${f}">${f>=1000?(f/1000)+' kHz':f+' Hz'}</option>`).join('')
+  $(id).value = pwmFreq[motor]
+})
+$('fqApply').onclick = ()=>{
+  if(transport==='none'){ log('!! Conecta el equipo primero (Wi-Fi o Bluetooth)'); return }
+  pwmFreq = { turb:Number($('fqTurb').value), dosf:Number($('fqDosf').value), tol:Number($('fqTol').value) }
+  try{ localStorage.setItem('dp_freq', JSON.stringify(pwmFreq)) }catch(e){}
+  // v8.8: no confiar en el envío — esperar la CONFIRMACIÓN de la tarjeta
+  // ("Frecuencia TURB = X Hz" por cada motor) y avisar si alguna no llega.
+  fqPending = {}
+  send(cmd.freq('turb', pwmFreq.turb))
+  send(cmd.freq('dosf', pwmFreq.dosf))
+  send(cmd.freq('tol', pwmFreq.tol))
+  setTimeout(()=>{
+    const esperado = { TURB:pwmFreq.turb, DOSF:pwmFreq.dosf, TOL:pwmFreq.tol }
+    const falta = Object.keys(esperado).filter(k=> fqPending[k]!==esperado[k])
+    if(falta.length===0){
+      pushAlert('✓ La tarjeta confirmó las frecuencias: turbina '+pwmFreq.turb+' Hz · dosf '+pwmFreq.dosf+' Hz · tolva '+pwmFreq.tol+' Hz (guardadas en el equipo)','info')
+    } else {
+      pushAlert('⚠ El equipo NO confirmó la frecuencia de: '+falta.join(', ')+'. Revisa la conexión (o firmware < v8.4, sin comando `freq`) y vuelve a aplicar.','warn')
+    }
+    fqPending = null
+  }, 2500)
+}
+let fqPending = null
+
+// guardián de atasco configurable (v8.3, persistente en la tarjeta)
+$('atascoApply').onclick = ()=>{
+  if(transport==='none'){ calMsg('⚠ Conecta el equipo primero.'); return }
+  const ms = Math.max(500, parseInt($('atascoMs').value||'4000',10))
+  $('atascoMs').value = ms
+  send(cmd.atasco(ms))
+  pushAlert('Guardián de atasco del equipo: '+ms+' ms','info')
+}
+$('rearmeApply').onclick = ()=>{
+  if(transport==='none'){ calMsg('⚠ Conecta el equipo primero.'); return }
+  const ms = Math.max(0, parseInt($('rearmeMs').value||'5000',10)||0)
+  $('rearmeMs').value = ms
+  send(cmd.rearme(ms))
+  pushAlert('Rearme anti-repetición del equipo: '+ms+' ms'+(ms===0?' (DESACTIVADO — no recomendado)':''),'info')
+}
+
+// ---------- modo continuo: girar indefinido al retardo elegido ----------
+let calRunOn = false
+function updateCalOnOff(){
+  const b=$('calOnOff')
+  if(calRunOn){
+    b.innerHTML = '&#9209; Apagar dosificador (girando a '+calMeasureTarget+' ms)'
+    b.className = 'btn red block'
+  } else {
+    b.innerHTML = '&#9211; Encender continuo a este retardo'
+    b.className = 'btn ghost block'
+  }
+  b.style.marginTop='8px'
+}
+$('calOnOff').onclick = ()=>{
+  if(!calRunOn){
+    if(transport==='none'){ calMsg('⚠ Conecta el equipo primero (Wi-Fi o Bluetooth).'); return }
+    if(calState.active){ calMsg('Espera a que termine la calibración en curso.'); return }
+    hallCal.length = 0
+    calMeasureTarget = Number($('calPoint').value)
+    send(cmd.calibrarOn(calMeasureTarget))
+    calRunOn = true
+    calMsg('Dosificador girando continuo a '+calMeasureTarget+' ms — mira el duty en vivo arriba. Se apaga con este mismo botón.')
+  } else {
+    send(cmd.parar())
+    calRunOn = false
+    calMeasureTarget = null
+    calMsg('Dosificador apagado.')
+  }
+  updateCalOnOff(); render()
+}
+updateCalOnOff()
+$('calCancel').onclick = ()=>{ send(cmd.parar()); abortCal('Calibración cancelada.') }
+$('calClear').onclick = ()=>{
+  hallCal.length=0
+  calResults={}; saveCalResults(); renderCalResults()
+  calMsg(''); render()
+}
+renderCalResults()
+
+// secuencias rápidas, GPS y comando manual
+const PCMD_PRUEBA = ['ciclo','test leds','test motors','ident']
+document.querySelectorAll('[data-pcmd]').forEach(b=> b.addEventListener('click', ()=>
+  PCMD_PRUEBA.includes(b.dataset.pcmd) ? sendPrueba(b.dataset.pcmd) : send(b.dataset.pcmd)))
+$('pCmdSend').onclick = ()=>{ const v=$('pCmd').value.trim(); if(v){ send(v); $('pCmd').value='' } }
+$('pCmd').addEventListener('keydown', e=>{ if(e.key==='Enter') $('pCmdSend').click() })
+// logs y comando serial: SOLO en Pruebas, y con interruptor para habilitarlos
+let termOn = (localStorage.getItem('dp_term')||'on')==='on'
+function applyTermVisibility(){
+  $('termWrap').style.display = (current==='pruebas' && termOn) ? '' : 'none'
+  $('cmdRow').style.display = termOn ? '' : 'none'
+  $('termSw').classList.toggle('on', termOn)
+}
+$('termSw').addEventListener('click', ()=>{
+  termOn = !termOn
+  try{ localStorage.setItem('dp_term', termOn?'on':'off') }catch(e){}
+  applyTermVisibility()
+})
+window.__termReady = true
+applyTermVisibility()
+
+// ---------- vista Pro / Sencilla de Dosificar (se elige en Configuración) ----------
+let uiVista = 'pro'
+try{ uiVista = localStorage.getItem('dp_vista')||'pro' }catch(e){}
+function applyVista(){
+  const dum = uiVista==='dummie'
+  $('proFields').style.display = dum ? 'none' : ''
+  $('dumFields').style.display = dum ? '' : 'none'
+  document.querySelectorAll('#uiSeg div').forEach(d=> d.classList.toggle('on', d.dataset.ui===uiVista))
+}
+document.querySelectorAll('#uiSeg div').forEach(d=> d.addEventListener('click', ()=>{
+  uiVista = d.dataset.ui
+  try{ localStorage.setItem('dp_vista', uiVista) }catch(e){}
+  applyVista()
+  pushAlert('Vista de Dosificar: '+(uiVista==='pro'?'Pro':'Sencilla'),'info')
+}))
+// cards de la vista Sencilla
+const DUM_TIEMPOS = [1000,1500,2000,2500,3000,3500,4000,5000]
+$('dumTini').innerHTML = DUM_TIEMPOS.map(t=>`<option value="${t}">${(t/1000).toFixed(1)} s</option>`).join('')
+$('dumTfin').innerHTML = DUM_TIEMPOS.map(t=>`<option value="${t}">${(t/1000).toFixed(1)} s</option>`).join('')
+$('dmM').onclick = ()=> changeDosis(-1)
+$('dmP').onclick = ()=> changeDosis(1)
+$('dumTini').addEventListener('change', ()=>{ dose.tini=parseInt($('dumTini').value,10); saveDose(); liveApply(cmd.tini(dose.tini)); render() })
+$('dumTfin').addEventListener('change', ()=>{ dose.tfin=parseInt($('dumTfin').value,10); saveDose(); liveApply(cmd.tfin(dose.tfin)); render() })
+$('dumRet').addEventListener('change', ()=>{ $('inRetardo').value=$('dumRet').value; $('inRetardo').dispatchEvent(new Event('change')) })
+// el card de Velocidad muestra TODAS las velocidades creadas (calibradas)
+function renderDumVel(){
+  const host = $('dumVelRow')
+  const ordenadas = turbVel.slice().sort((a,b)=>a.ms-b.ms)
+  if(ordenadas.length===0){
+    host.innerHTML = '<div class="muted" style="font-size:11px">Sin velocidades calibradas todavía — regístralas en Configuración.</div>'
+    return
+  }
+  host.innerHTML = ordenadas.map((e,i)=>{
+    const tag = ordenadas.length>1 ? (i===0 ? 'Baja' : (i===ordenadas.length-1 ? 'Alta' : 'Media')) : 'Velocidad'
+    return `<div class="dvel" data-dvel="${e.ms}" data-dpct="${e.pct}">${tag}<br><b>${e.ms} m/s</b>`+
+      `<br><span style="font-size:9px;color:var(--muted2)">${e.pct}% duty${e.alt!=null?' · palma '+e.alt+' m':''}</span></div>`
+  }).join('')
+  host.querySelectorAll('.dvel').forEach(b=> b.addEventListener('click', ()=>{
+    dose.turb = Number(b.dataset.dpct)
+    syncPerdida(); saveDose()
+    liveApply(cmd.motor('turb', dose.turb), cmd.dosis(dosisComando()))
+    render()
+  }))
+}
+window.__dumReady = true
+renderDumVel()
+applyVista()
+
+// ---------- selector de velas (estadísticas) ----------
+$('velasSel').innerHTML = [4,6,8,12].map(v=>`<span class="retchip" data-v="${v}">${v} velas</span>`).join('')
+document.querySelectorAll('#velasSel .retchip').forEach(c=> c.addEventListener('click', ()=>{ velas=Number(c.dataset.v); render() }))
+
+// ---------- vinculación por QR (etiqueta en la tarjeta y en el equipo) ----------
+let qrDevices = {}
+try{ qrDevices = JSON.parse(localStorage.getItem('dp_qr_devices')||'{}') }catch(e){}
+let qrStream = null, qrLoop = null
+function qrRegister(payload){
+  // La etiqueta puede traer JSON {"s":"DOSAPALM-...","hw":"V1",...} o el serial plano.
+  let serial = String(payload).trim(), hw = ''
+  try{ const j = JSON.parse(payload); if(j.s){ serial = j.s; hw = j.hw||'' } }catch(e){}
+  if(!/^[\w-]{3,24}$/.test(serial)){ qrError('Etiqueta no válida: "'+String(payload).slice(0,40)+'"'); return }
+  const nuevo = !qrDevices[serial]
+  qrDevices[serial] = { hw, registeredAt: qrDevices[serial]?.registeredAt || Date.now() }
+  try{ localStorage.setItem('dp_qr_devices', JSON.stringify(qrDevices)) }catch(e){}
+  qrStop()
+  renderQrList()
+  pushAlert(nuevo ? ('Equipo '+serial+' registrado por QR') : ('Equipo '+serial+' ya estaba registrado'), 'info')
+  log('== QR: '+serial+(hw?' (hw '+hw+')':'')+' registrado ==')
+}
+function qrError(msg){ const e=$('qrErr'); e.textContent=msg; e.style.display='block' }
+async function qrStart(){
+  $('qrErr').style.display='none'
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    qrError('Este navegador no da acceso a la cámara aquí. Escribe el serial de la etiqueta abajo.'); return
+  }
+  if(!('BarcodeDetector' in window)){
+    qrError('Este navegador no puede leer QR con la cámara (típico en iPhone). Escribe el serial de la etiqueta abajo.'); return
+  }
+  try{
+    qrStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode:'environment' } })
+    const video = $('qrVideo'); video.srcObject = qrStream; video.style.display='block'; $('qrIllu').style.display='none'; await video.play()
+    const detector = new BarcodeDetector({ formats:['qr_code'] })
+    qrLoop = setInterval(async ()=>{
+      try{
+        const codes = await detector.detect(video)
+        if(codes.length) qrRegister(codes[0].rawValue)
+      }catch(e){/* frame no listo */}
+    }, 350)
+  }catch(e){ qrError('Cámara no disponible: '+e.message+'. Escribe el serial abajo.') }
+}
+function qrStop(){
+  clearInterval(qrLoop); qrLoop=null
+  if(qrStream){ qrStream.getTracks().forEach(t=>t.stop()); qrStream=null }
+  const v=$('qrVideo'); v.srcObject=null; v.style.display='none'; $('qrIllu').style.display='flex'
+}
+function renderQrList(){
+  const names = Object.keys(qrDevices)
+  $('qrList').innerHTML = names.length===0 ? '<div class="muted" style="font-size:12px">Ninguno todavía.</div>' :
+    names.map(s=>{
+      const d = qrDevices[s]
+      return `<div class="listitem"><div class="dw">&#128225;</div><div style="flex:1"><div style="font-weight:700;font-size:12.5px">${s}</div><div class="muted" style="font-size:11px">${d.hw?('hw '+d.hw+' · '):''}registrado ${new Date(d.registeredAt).toLocaleDateString()}</div></div><span class="chip g"><span class="d"></span>Trazado</span></div>`
+    }).join('')
+}
+$('qrStart').onclick = qrStart
+$('qrManualGo').onclick = ()=>{ const v=$('qrManual').value.trim(); if(v){ qrRegister(v); $('qrManual').value='' } }
+$('qrBack').onclick = ()=> go('dispositivos')
+renderQrList()
+
+document.body.classList.add('on-login')   // versión web: sin barra lateral hasta entrar
+
+// ---------- alternador vista web / vista móvil (solo escritorio) ----------
+function applyViewMode(){
+  const web = (localStorage.getItem('dp_view')||'web') === 'web'
+  document.body.classList.toggle('webmode', web)
+  $('viewToggle').innerHTML = web ? '&#128241; Vista móvil' : '&#128421; Vista web'
+}
+$('viewToggle').onclick = ()=>{
+  const cur = localStorage.getItem('dp_view')||'web'
+  try{ localStorage.setItem('dp_view', cur==='web' ? 'movil' : 'web') }catch(e){}
+  applyViewMode()
+  if(current==='mapa' && leafMap) setTimeout(()=>leafMap.invalidateSize(), 250)
+}
+applyViewMode()
+
+buildTabs(); newTracker(); render()
+setInterval(()=>{ const d=new Date(); $('clock').textContent=d.getHours()+':'+String(d.getMinutes()).padStart(2,'0') }, 1000)
+})()
+</script>
+</body>
+</html>
