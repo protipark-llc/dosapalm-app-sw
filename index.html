@@ -122,6 +122,9 @@
   .actcard{border:none;border-radius:16px;min-height:100px;padding:14px 10px;font-weight:800;font-size:14px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;box-shadow:0 2px 10px rgba(20,25,40,.12);transition:transform .08s,filter .15s;line-height:1.25}
   .actcard:active{transform:scale(.97)}
   .actcard:hover{filter:brightness(1.03)}
+  .actcard[disabled]{opacity:.55;cursor:not-allowed;filter:saturate(.4)}
+  .actcard[disabled]:active{transform:none}
+  .numin:focus{border-color:var(--orange);outline:none}
   .actcard .aic{font-size:26px;line-height:1}
   .actcard .asub{font-size:9.5px;font-weight:600;opacity:.75;text-align:center}
   .actcard.session{background:#fff;color:#2f8a34;border:1.5px solid #bfe3c6}
@@ -288,6 +291,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-18 21:46 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -408,6 +412,7 @@
             <button class="actcard session" id="btnSession" title="Inicia una operación para acumular las aplicaciones"><span class="aic">&#9654;</span>Iniciar operación<span class="asub">guarda las aplicaciones en Data</span></button>
             <button class="actcard exec" id="btnDosificar"><span class="aic">&#128167;</span>Ejecutar ciclo<span class="asub">también con el botón RF del equipo</span></button>
           </div>
+          <button class="btn red block" id="btnSafe" style="margin-top:10px;padding:13px 0;font-size:14px">&#128721; SAFE — apagar todo de inmediato</button>
         </div>
         <div class="tabbar" data-tabs></div>
       </div>
@@ -516,6 +521,17 @@
       <div class="scrn" data-scrn="config">
         <div class="apphead"><div class="brand"><svg class="logo" viewBox="0 0 48 48"><rect x="8" y="14" width="26" height="26" rx="4" fill="#fff"/><rect x="10" y="16" width="22" height="22" rx="3" fill="#E8721C"/></svg><div><div class="co">ENVASES S.A.S</div><div class="pt">DOSAPALM V1</div></div></div><div class="scr-title">Configuración · Admin</div></div>
         <div class="body">
+          <!-- v9.2: envío de la configuración completa a la tarjeta -->
+          <div class="card">
+            <div class="row" style="margin-bottom:6px">
+              <span style="font-weight:700;font-size:13px">Configuración de la tarjeta</span>
+              <span class="chip" id="cfgChip"><span class="d"></span><span id="cfgChipTxt">—</span></span>
+            </div>
+            <div class="muted" style="font-size:11.5px">Una tarjeta <b>nueva o recién programada</b> avisa que no está configurada. Este botón le envía TODA la configuración actual de la app (retardo y PWM fijo, dosis, tiempos, turbina, atasco, rearme y frecuencias) y la marca como configurada.</div>
+            <button class="btn primary block" id="btnSendCfg" style="margin-top:10px">&#128228; Enviar configuración a la tarjeta</button>
+            <div class="hint" id="cfgMsg"></div>
+          </div>
+
           <div class="card">
             <div style="font-weight:700;font-size:13px;margin-bottom:9px">Vista de Dosificar</div>
             <div class="seg" id="uiSeg"><div data-ui="pro">Pro</div><div data-ui="dummie">Sencilla</div></div>
@@ -551,14 +567,14 @@
             <div class="hint" id="calSweepMsg"></div>
             <div style="display:flex;gap:7px;align-items:center;margin-top:10px">
               <span style="font-size:12px;flex-shrink:0">Guardián de atasco</span>
-              <input type="number" id="atascoMs" class="numin" value="4000" min="500" step="500" style="flex:1"/>
+              <input type="number" id="atascoMs" class="numin" value="5000" min="500" step="500" style="flex:1"/>
               <span class="muted" style="font-size:11px">ms</span>
               <button class="btn ghost" id="atascoApply">Aplicar</button>
             </div>
             <div class="note">Tiempo sin pulsos hall antes de que el equipo corte por atasco. Con carga pesada o arranque lento, súbelo (p. ej. 8000 ms). Queda guardado en la tarjeta.</div>
             <div style="display:flex;gap:7px;align-items:center;margin-top:10px">
               <span style="font-size:12px;flex-shrink:0">Rearme anti-repetición</span>
-              <input type="number" id="rearmeMs" class="numin" value="5000" min="0" step="500" style="flex:1"/>
+              <input type="number" id="rearmeMs" class="numin" value="2000" min="0" step="500" style="flex:1"/>
               <span class="muted" style="font-size:11px">ms</span>
               <button class="btn ghost" id="rearmeApply">Aplicar</button>
             </div>
@@ -878,6 +894,9 @@ var DosapalmProtocol = (() => {
      * operativo (DOSF_PCT_MIN)–100 y la aplicación corre a ese duty sin variar.
      */
     dutyFijo: (pct) => `dutyfijo ${pct <= 0 ? 0 : Math.min(100, Math.max(DOSF_PCT_MIN, Math.round(pct)))}`,
+    /** v9.2: bandera de tarjeta configurada — consultar / marcar tras enviar todo. */
+    configurado: () => "configurado",
+    configuradoOk: () => "configurado ok",
     /** v8.3: timeout del guardián de atasco (persistente en el equipo). */
     atasco: (ms) => `atasco ${Math.max(500, Math.round(ms))}`,
     /**
@@ -1388,7 +1407,8 @@ const RETARDOS = [0,100,200,250,300,400,500,600,700]
 // perdida: % que se pierde en la manguera (medido en campo: 50–60%). La dosis
 // que fija el usuario es la FINAL (salida de la manguera); la máquina dosifica
 // dosis/(1-perdida) para compensar.
-const dose = { dosis:15, turb:40, tini:2500, tfin:3500, retardo:100, perdida:60, gcav:2 }
+// Defaults de fábrica: turbina 40% (10 m/s), retardo 500 ms calibrado (100% fijo)
+const dose = { dosis:15, turb:40, tini:2500, tfin:3500, retardo:500, dutyFijo:100, perdida:60, gcav:2 }
 function perdidaPct(){ return Math.min(90, Math.max(0, Number(dose.perdida)||0)) }
 // gramos que debe dosificar la MÁQUINA para que llegue dose.dosis al final
 function dosisMaquina(){ return dose.dosis<=0 ? 0 : Math.round(dose.dosis/(1-perdidaPct()/100)) }
@@ -1410,13 +1430,19 @@ function savePerdidas(){ try{ localStorage.setItem('dp_perdidas', JSON.stringify
 function perdidaCalibrada(){ return perdidas.find(e=> e.turb===dose.turb && e.ret===dose.retardo) || null }
 // Piñones dosificadores: cada uno con cantidad de cavidades y g por cavidad.
 // Se configuran en Pruebas; en Dosificar solo se elige el instalado.
-let pinones = [{ name:'Piñón A', cav:10, gcav:2 }]
+let pinones = [{ name:'Piñón A', cav:4, gcav:2 }]
 try{ const s3=JSON.parse(localStorage.getItem('dp_pinones')||'null'); if(Array.isArray(s3) && s3.length) pinones=s3 }catch(e){}
 function savePinones(){ try{ localStorage.setItem('dp_pinones', JSON.stringify(pinones)) }catch(e){} }
 function pinonActivo(){ return pinones.find(p=> p.name===dose.pinon) || pinones[0] }
-// velocidades de turbina calibradas: % de potencia (duty) → m/s medidos (5–30)
-let turbVel = []
-try{ const s2=JSON.parse(localStorage.getItem('dp_turbvel')||'null'); if(Array.isArray(s2)) turbVel=s2 }catch(e){}
+// velocidades de turbina calibradas: % de potencia (duty) → m/s medidos.
+// Datos de fábrica (medición de campo, 16 jul 2026):
+let turbVel = [
+  { pct:20, ms:5,  alt:3 },
+  { pct:40, ms:10, alt:6 },
+  { pct:71, ms:15, alt:3 },
+  { pct:78, ms:21, alt:6 },   // máx. recomendado
+]
+try{ const s2=JSON.parse(localStorage.getItem('dp_turbvel')||'null'); if(Array.isArray(s2) && s2.length) turbVel=s2 }catch(e){}
 function saveTurbVel(){ try{ localStorage.setItem('dp_turbvel', JSON.stringify(turbVel)) }catch(e){} }
 // Al cambiar turbina o retardo, si hay pérdida calibrada para el seteo, se aplica.
 function syncPerdida(){
@@ -1513,6 +1539,7 @@ function onOpen(kind){
     }
   }, 4000)
   send(cmd.status()); send(cmd.modo('real')); send(cmd.log(true))
+  send(cmd.configurado())   // v9.2: ¿la tarjeta ya tiene configuración aplicada?
 }
 function connect(){
   const host = $('host').value.trim()||'localhost', port = $('port').value.trim()||'8081'
@@ -1556,8 +1583,27 @@ function send(c){
 }
 
 // ---------- ingesta de líneas ----------
-let lastDoseEndAt = 0      // v9.1: fin del último ciclo (guardián de repetición)
+// v9.1: fin del último ciclo — PERSISTIDO para que recargar la página no
+// borre la cuenta regresiva del rearme (era la vía para colar ciclos falsos).
+let lastDoseEndAt = 0
+try{ lastDoseEndAt = Number(localStorage.getItem('dp_lastend'))||0 }catch(e){}
+function marcarFinCiclo(){
+  lastDoseEndAt = Date.now()
+  try{ localStorage.setItem('dp_lastend', String(lastDoseEndAt)) }catch(e){}
+}
 let expectingStart = false // true solo cuando la app misma pidió dosificar
+let startTimeout = null    // aviso si el equipo no confirma el arranque
+// La app REFLEJA la ventana anti-repetición del equipo: no envía ciclos ni
+// muestra progreso durante el rearme. Se sincroniza con las líneas del equipo.
+let appRearmeMs = 2000
+// v9.2: estado de la bandera de configuración de la tarjeta (null = desconocido)
+let boardConfigured = null
+let cfgAlerted = false
+function rearmeRestante(){
+  if(!lastDoseEndAt) return 0
+  const rest = appRearmeMs - (Date.now() - lastDoseEndAt)
+  return rest > 0 ? rest : 0
+}
 function onLine(line){
   log(line)
   // v8.8: verificación de "Aplicar frecuencias" — marcar cada confirmación.
@@ -1601,31 +1647,62 @@ function onLine(line){
       }
     }
   }
-  if(parsed.t==='doseDone' || parsed.t==='doseStopped'){ lastDoseEndAt = Date.now() }
-  // v9.1: aviso del bloqueo anti-repetición del equipo
-  if(/DOSIFICAR BLOQUEADO: anti-repeticion/.test(line)){
-    pushAlert('El equipo bloqueó un arranque repetido (anti-repetición). Si nadie tocó el pulsador, es ruido eléctrico — típico con la turbina a alta potencia.','warn')
+  if(parsed.t==='doseDone' || parsed.t==='doseStopped'){ marcarFinCiclo() }
+  // v9.2: bandera de tarjeta configurada. Una tarjeta nueva/reprogramada
+  // responde NO → alerta para ir a Configuración a enviarle todo.
+  if(/CONFIGURADO: NO/.test(line)){
+    boardConfigured = false
+    if(!cfgAlerted){
+      cfgAlerted = true
+      pushAlert('⚠ La tarjeta NO está configurada (nueva o recién programada). Ve a Configuración y toca "Enviar configuración a la tarjeta".','alta')
+    }
+    render()
+  } else if(/CONFIGURADO: SI/.test(line)){
+    if(boardConfigured===false){
+      pushAlert('✓ Tarjeta marcada como configurada','info')
+      $('cfgMsg').textContent = '✓ La tarjeta confirmó: configurada.'
+    }
+    boardConfigured = true
+    render()
+  }
+  // La app mantiene su ventana de rearme sincronizada con la del equipo.
+  let mRe
+  if((mRe = /Rearme anti-repeticion = (\d+) ms/.exec(line))) appRearmeMs = Number(mRe[1])
+  else if((mRe = /\| rearme (\d+) ms/.exec(line))) appRearmeMs = Number(mRe[1])
+  // v9.1: aviso del bloqueo anti-repetición del equipo. La app ADOPTA el reloj
+  // del equipo: aunque la página se haya recargado, la cuenta regresiva arranca.
+  const mBloq = /DOSIFICAR BLOQUEADO: anti-repeticion \((\d+) ms desde el ultimo ciclo; rearme (\d+) ms\)/.exec(line)
+  if(mBloq){
+    if(expectingStart){ expectingStart = false; clearTimeout(startTimeout) }
+    appRearmeMs = Number(mBloq[2])
+    lastDoseEndAt = Date.now() - Number(mBloq[1])
+    try{ localStorage.setItem('dp_lastend', String(lastDoseEndAt)) }catch(e){}
+    pushAlert('El equipo bloqueó el arranque (anti-repetición): faltan '+Math.ceil(rearmeRestante()/1000)+' s de rearme. Si nadie tocó el pulsador, es ruido eléctrico.','warn')
   }
   if(parsed.t==='doseStart'){
+    const pedidoPorApp = expectingStart
+    expectingStart = false
+    clearTimeout(startTimeout)
     // v9.1: GUARDIÁN DE REPETICIÓN — un ciclo que la app no pidió, arrancando
     // justo después del anterior, es casi seguro ruido: se DETIENE de inmediato.
-    if(!overlay.open && !expectingStart && lastDoseEndAt && (Date.now()-lastDoseEndAt) < 6000){
+    if(!overlay.open && !pedidoPorApp && lastDoseEndAt && (Date.now()-lastDoseEndAt) < 6000){
       send(cmd.parar())
       pushAlert('⚠ CICLO REPETIDO detectado y DETENIDO automáticamente (arrancó solo tras el anterior — posible ruido con turbina alta). Revisa el rearme anti-repetición en Configuración.','alta')
       log('!! GUARDIÁN: ciclo repetido no solicitado → parar enviado')
       return
     }
-    expectingStart = false
-    // Ciclo que la app NO lanzó = pulsador físico RF (u otro control): se abre
-    // la ventana de progreso igual y la aplicación se cuenta en la sesión.
+    // El progreso se abre AQUÍ, con la confirmación real del equipo — nunca antes.
     if(!overlay.open){
       overlay.open = true
       overlay.cycleStart = Date.now()
+      $('ovWarn').style.display='none'
       $('cycOverlay').classList.add('show')
       clearInterval(ovTicker)
       ovTicker = setInterval(()=>{ if(overlay.open) renderOverlay() }, 250)
-      pushAlert('Ciclo iniciado con el pulsador físico del equipo — siguiéndolo en vivo','info')
-      log('!! Ciclo externo detectado (pulsador físico): la app lo sigue y lo registra')
+      if(!pedidoPorApp){
+        pushAlert('Ciclo iniciado con el pulsador físico del equipo — siguiéndolo en vivo','info')
+        log('!! Ciclo externo detectado (pulsador físico): la app lo sigue y lo registra')
+      }
     }
     overlay.target = parsed.pulses; overlay.hallStart = state.hall
     overlay.stageStart = Date.now()
@@ -1721,26 +1798,23 @@ function ejecutar(){
   // conteo va por cavidades (dosis de máquina ÷ gramos por cavidad).
   send(cmd.tini(dose.tini)); send(cmd.tfin(dose.tfin)); send(cmd.dosis(dosisComando()))
   send(cmd.retardo(dose.retardo))
-  expectingStart = true   // este arranque SÍ lo pidió la app
+  // La app respeta el rearme del equipo: ni siquiera envía el comando.
+  const rest = rearmeRestante()
+  if(rest > 0){
+    pushAlert('Anti-repetición: espera '+Math.ceil(rest/1000)+' s antes del siguiente ciclo','warn')
+    return
+  }
+  // El progreso se muestra SOLO cuando el equipo CONFIRMA el arranque
+  // (línea DOSIFICAR) — nunca antes.
+  expectingStart = true
   send(cmd.dosificar())
-  overlay.open = true; overlay.target = pulsosNecesarios(); overlay.hallStart = state.hall
-  overlay.stageStart = Date.now(); overlay.cycleStart = Date.now(); overlay.warmupMs = dose.tini; overlay.cleanMs = dose.tfin
-  $('ovWarn').style.display='none'
-  $('cycOverlay').classList.add('show')
-  // Las etapas 1 y 3 avanzan por tiempo: refrescar aunque el equipo no emita líneas.
-  clearInterval(ovTicker)
-  ovTicker = setInterval(()=>{ if(overlay.open) renderOverlay() }, 250)
-  // Si en 5 s el equipo no confirma el arranque del ciclo, avisar en vez de
-  // dejar la ventana girando para siempre (conexión caída, clave, sin modo...).
-  clearTimeout(ovWatchdog)
-  ovWatchdog = setTimeout(()=>{
-    if(overlay.open && tracker && !tracker.inProgress){
-      const w=$('ovWarn')
-      w.textContent='⚠ El equipo no confirmó el ciclo. Revisa el terminal de abajo (conexión, clave, modo) y toca Parar para cerrar.'
-      w.style.display='block'
+  clearTimeout(startTimeout)
+  startTimeout = setTimeout(()=>{
+    if(expectingStart){
+      expectingStart = false
+      pushAlert('⚠ El equipo no confirmó el arranque del ciclo. Revisa la conexión o mira el terminal en Pruebas.','warn')
     }
   }, 5000)
-  render()
 }
 
 // ---------- render ----------
@@ -1750,6 +1824,9 @@ function render(){
   chip('chLink', linked, 'Wi-Fi directo', linked?'g':'')
   chip('chGps', state.gpsFix, 'GPS '+(state.gpsFix?(state.sats+' sat'):'sin fix'), state.gpsFix?'g':'a')
   chip('chHall', true, 'Hall '+state.hall+' ('+(state.hall*2)+' g)', 'b')
+  chip('cfgChip', boardConfigured===true,
+    boardConfigured==null ? 'Sin verificar' : (boardConfigured ? 'Configurada' : 'SIN CONFIGURAR'),
+    boardConfigured==null ? '' : (boardConfigured ? 'g' : 'a'))
   chip('chMode', true, 'Modo '+(state.mode==='NONE'?'—':state.mode), state.mode==='REAL'?'g':'')
   // versión del firmware detectada
   $('fwTxt').textContent = state.fwVersion ? ('v'+state.fwVersion) : '—'
@@ -2374,6 +2451,33 @@ function liveApply(){
   for(const c of arguments) send(c)
 }
 $('btnDosificar').onclick = ejecutar
+// SAFE de emergencia: detiene la dosificación y apaga TODAS las salidas.
+$('btnSafe').onclick = ()=>{
+  if(transport==='none'){ log('!! Conecta el equipo primero (Wi-Fi o Bluetooth)'); return }
+  send(cmd.parar())
+  send(cmd.safe())
+  closeOverlay()
+  pushAlert('SAFE enviado: dosificación detenida y todas las salidas apagadas','warn')
+  render()
+}
+// Estado del card "Ejecutar ciclo": cuenta regresiva del rearme y espera de
+// confirmación — el usuario VE por qué no puede lanzar todavía.
+function renderExecBtn(){
+  const b = $('btnDosificar')
+  if(overlay.open) return   // ciclo en curso: el overlay manda
+  const rest = rearmeRestante()
+  if(expectingStart){
+    b.disabled = true
+    b.innerHTML = '<span class="aic">&#8987;</span>Iniciando…<span class="asub">esperando confirmación del equipo</span>'
+  } else if(rest > 0){
+    b.disabled = true
+    b.innerHTML = '<span class="aic">&#8987;</span>Espera '+Math.ceil(rest/1000)+' s<span class="asub">anti-repetición del equipo ('+appRearmeMs+' ms)</span>'
+  } else {
+    b.disabled = false
+    b.innerHTML = '<span class="aic">&#128167;</span>Ejecutar ciclo<span class="asub">también con el botón RF del equipo</span>'
+  }
+}
+setInterval(renderExecBtn, 400)
 // Parar SIEMPRE cierra la ventana del ciclo, responda o no el equipo.
 $('btnParar').onclick = ()=>{ send(cmd.parar()); closeOverlay(); render() }
 $('btnSession').onclick = ()=>{
@@ -2521,8 +2625,14 @@ $('monApply').onclick = ()=>{
 // aplica el retardo calibrado como configuración de trabajo de la máquina.
 let calMeasureTarget = null
 const calState = { active:false, queue:[], current:null, total:0, timer:null, ackTimer:null, started:false }
-let calResults = {}
-try{ calResults = JSON.parse(localStorage.getItem('dp_cal')||'{}') }catch(e){}
+// Calibraciones de retardo de fábrica (medición de campo, 16 jul 2026).
+// dev 0 = se asume que el duty calibrado clava el objetivo hasta recalibrar.
+let calResults = {
+  500: { avg:500, dev:0, dutyPct:100, valid:null, at:0 },
+  600: { avg:600, dev:0, dutyPct:97,  valid:null, at:0 },
+  700: { avg:700, dev:0, dutyPct:92,  valid:null, at:0 },
+}
+try{ const sc=JSON.parse(localStorage.getItem('dp_cal')||'null'); if(sc && Object.keys(sc).length) calResults=sc }catch(e){}
 function saveCalResults(){ try{ localStorage.setItem('dp_cal', JSON.stringify(calResults)) }catch(e){} }
 
 $('calPoint').innerHTML = RETARDOS.filter(v=>v>0).map(v=>`<option value="${v}">${v} ms/cav</option>`).join('')
@@ -2713,6 +2823,21 @@ $('atascoApply').onclick = ()=>{
   $('atascoMs').value = ms
   send(cmd.atasco(ms))
   pushAlert('Guardián de atasco del equipo: '+ms+' ms','info')
+}
+// v9.2: enviar TODA la configuración a la tarjeta y marcarla como configurada
+$('btnSendCfg').onclick = ()=>{
+  if(transport==='none'){ $('cfgMsg').textContent='⚠ Conecta el equipo primero (botón de Bluetooth en Inicio).'; return }
+  send(cmd.modo('real'))
+  send(cmd.retardo(dose.retardo))
+  send(cmd.dutyFijo(dose.dutyFijo||0))
+  send(cmd.dosis(dosisComando()))
+  send(cmd.tini(dose.tini)); send(cmd.tfin(dose.tfin))
+  send(cmd.motor('turb', dose.turb))
+  send(cmd.atasco(Math.max(500, parseInt($('atascoMs').value||'5000',10))))
+  send(cmd.rearme(Math.max(0, parseInt($('rearmeMs').value||'2000',10)||0)))
+  send(cmd.freq('turb', pwmFreq.turb)); send(cmd.freq('dosf', pwmFreq.dosf)); send(cmd.freq('tol', pwmFreq.tol))
+  send(cmd.configuradoOk())
+  $('cfgMsg').textContent = 'Configuración enviada — esperando la confirmación de la tarjeta…'
 }
 $('rearmeApply').onclick = ()=>{
   if(transport==='none'){ calMsg('⚠ Conecta el equipo primero.'); return }
