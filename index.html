@@ -291,7 +291,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-21 22:55 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-21 23:30 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -456,15 +456,19 @@
             <div class="sysbox"><div class="k">Prom / dosis</div><div class="v" style="font-size:22px"><span id="stAvg">0</span><span class="muted" style="font-size:11px"> g</span></div></div>
           </div>
           <div class="card">
-            <div class="row" style="margin-bottom:4px"><span style="font-weight:700;font-size:13px">Aplicaciones en el tiempo</span><span class="muted" style="font-size:10.5px">sesión actual</span></div>
-            <div class="muted" style="font-size:11px;margin-bottom:6px">Velas: divide la sesión en intervalos iguales.</div>
-            <div class="retsel" id="velasSel" style="margin-top:0"></div>
+            <div class="row" style="margin-bottom:4px"><span style="font-weight:700;font-size:13px">Aplicaciones por hora</span><span class="muted" style="font-size:10.5px">cada barra = 1 hora de la jornada</span></div>
             <div class="calchart" id="stChart" style="height:110px"><div class="calempty">Sin aplicaciones en la sesión.</div></div>
             <div class="row" style="font-size:9.5px;color:#9aa1ad;margin-top:4px"><span id="stT0">—</span><span id="stT1">—</span></div>
           </div>
           <div class="card">
             <div style="font-weight:700;font-size:13px;margin-bottom:6px">Resultados</div>
             <div class="chips" id="stResults"></div>
+          </div>
+          <!-- v9.6: dashboard global de todos los equipos (solo Admin) -->
+          <div class="card" id="dashGlobal" style="display:none">
+            <div class="row"><span style="font-weight:700;font-size:13px">&#127760; Dashboard global — todos los equipos</span><span class="muted" style="font-size:10.5px">solo Admin</span></div>
+            <div id="dashList" style="margin-top:6px"></div>
+            <div class="note">Cada aplicación queda <b>guardada en el ESP32</b> (y en la microSD si está habilitada) aunque no haya conexión. Al reconectar, la app descarga lo pendiente y actualiza esta base global, segmentada por equipo y con el total sumado.</div>
           </div>
         </div>
         <div class="tabbar" data-tabs></div>
@@ -544,6 +548,8 @@
               <button class="btn ghost" id="holdBtApply">Aplicar</button>
             </div>
             <div class="note">Sostener el pulsador físico ese tiempo alterna la <b>operación</b> (toma de datos, LED rojo titilando cada 300 ms) o el <b>Bluetooth/config</b>. La de Bluetooth debe ser menor que la de operación. Quedan guardadas en la tarjeta.</div>
+            <div class="tog" style="margin-top:10px"><span>&#128190; Respaldo en microSD</span><div class="sw" id="sdSw"></div></div>
+            <div class="note">Cada aplicación queda SIEMPRE guardada en la memoria interna del ESP32 (con o sin conexión). Con este respaldo activo, si el equipo tiene microSD también se copia a <code>/eventos.csv</code>. Queda guardado en la tarjeta.</div>
           </div>
 
           <div class="card">
@@ -1564,6 +1570,7 @@ function onOpen(kind){
   send(cmd.status()); send(cmd.modo('real')); send(cmd.log(true))
   send(cmd.configurado())   // v9.2: ¿la tarjeta ya tiene configuración aplicada?
   send('operacion')         // v9.4: sincronizar el estado de toma de datos
+  send(cmd.evtCount())      // v9.6: ¿hay aplicaciones guardadas por descargar?
 }
 function connect(){
   const host = $('host').value.trim()||'localhost', port = $('port').value.trim()||'8081'
@@ -1620,6 +1627,20 @@ let startTimeout = null    // aviso si el equipo no confirma el arranque
 // La app REFLEJA la ventana anti-repetición del equipo: no envía ciclos ni
 // muestra progreso durante el rearme. Se sincroniza con las líneas del equipo.
 let appRearmeMs = 2000
+// v9.6: BASE DE DATOS GLOBAL de aplicaciones, segmentada por equipo. Se llena
+// con los eventos PERSISTIDOS en cada ESP32 (línea EVT): en vivo al dosificar
+// y por sincronización al reconectar tras trabajo sin conexión.
+let db = {}
+try{ db = JSON.parse(localStorage.getItem('dp_db')||'{}') }catch(e){}
+function saveDb(){ try{ localStorage.setItem('dp_db', JSON.stringify(db)) }catch(e){} }
+function dbSerial(){ const s=$('serialTxt').textContent; return (s && s!=='—') ? s : 'EQUIPO' }
+function dbAdd(serial, seq, rec){
+  const d = db[serial] = db[serial] || { apps:{} }
+  if(d.apps[seq]) return false      // dedup: ya sincronizada
+  d.apps[seq] = rec
+  saveDb()
+  return true
+}
 // v9.2: estado de la bandera de configuración de la tarjeta (null = desconocido)
 let boardConfigured = null
 let cfgAlerted = false
@@ -1693,6 +1714,24 @@ function onLine(line){
   let mRe
   if((mRe = /Rearme anti-repeticion = (\d+) ms/.exec(line))) appRearmeMs = Number(mRe[1])
   else if((mRe = /\| rearme (\d+) ms/.exec(line))) appRearmeMs = Number(mRe[1])
+  // v9.6: sincronización de las aplicaciones PERSISTIDAS en el equipo → base global
+  let mEvt
+  if((mEvt = /^EVT COUNT (\d+)/.exec(line))){
+    if(Number(mEvt[1])>0){
+      log('!! Sincronizando '+mEvt[1]+' aplicaciones guardadas en el equipo...')
+      send('evt since 0')
+    }
+  } else if((mEvt = /^EVT,(\d+),(\d+),([\d.]+),(\d+),([01]),([-\d.]+),([-\d.]+),(\d+),(\d+),(\d+),(\d+),(\w+)/.exec(line))){
+    const nuevo = dbAdd(dbSerial(), Number(mEvt[1]), {
+      seq:Number(mEvt[1]), ms:Number(mEvt[2]), grams:Number(mEvt[3]), pulses:Number(mEvt[4]),
+      fix:mEvt[5]==='1', lat:Number(mEvt[6]), lon:Number(mEvt[7]), retardo:Number(mEvt[11]),
+      result:mEvt[12], syncedAt:Date.now(),
+    })
+    if(nuevo) render()
+  }
+  // v9.6: estado del respaldo microSD reportado por el equipo
+  if(/SD: respaldo activado|SD: microSD montada/.test(line)){ $('sdSw').classList.add('on') }
+  else if(/SD: respaldo desactivado/.test(line)){ $('sdSw').classList.remove('on') }
   // v9.4: estado de operación reportado por el equipo (app y tarjeta en sincronía)
   if(/OPERACION: ACTIVA/.test(line)){ setOperacionApp(true, true) }
   else if(/OPERACION: DETENIDA/.test(line)){ setOperacionApp(false, true) }
@@ -1800,6 +1839,7 @@ function setSerial(s){ $('serialTxt').textContent=s; $('devSerial').textContent=
 let ovWatchdog = null
 function closeOverlay(){
   overlay.open = false
+  overlay.idleAt = 0
   clearTimeout(ovWatchdog)
   clearInterval(ovTicker); ovTicker = null
   $('cycOverlay').classList.remove('show')
@@ -1973,13 +2013,11 @@ function render(){
 }
 
 // ---------- estadísticas: velas = intervalos iguales de la sesión ----------
-let velas = 6
 function renderStats(){
   const evs = session.events
   $('stApps').textContent = session.applications
   $('stGrams').textContent = session.grams
   $('stAvg').textContent = session.applications>0 ? (session.grams/session.applications).toFixed(1) : '0'
-  document.querySelectorAll('#velasSel .retchip').forEach(c=> c.classList.toggle('on', Number(c.dataset.v)===velas))
   // resultados (ok / parcial / error)
   const counts = { ok:0, partial:0, error:0 }
   evs.forEach(ev=>{ counts[ev.result]=(counts[ev.result]||0)+1 })
@@ -1994,20 +2032,42 @@ function renderStats(){
     $('stT0').textContent='—'; $('stT1').textContent='—'
     return
   }
-  const t0 = session.startedAt, t1 = Date.now()
-  const span = Math.max(t1-t0, 60000)  // mínimo 1 min para que las velas no colapsen
-  const buckets = new Array(velas).fill(0)
+  // barras FIJAS de 1 HORA: la jornada completa desde el inicio de la sesión,
+  // con la cantidad de aplicaciones de cada hora en vertical.
+  const HORA = 3600000
+  const t0 = session.startedAt
+  const nB = Math.min(24, Math.max(1, Math.ceil((Date.now()-t0)/HORA)))
+  const buckets = new Array(nB).fill(0)
   evs.forEach(ev=>{
     const ts = new Date(ev.ts_device).getTime()
-    const i = Math.min(velas-1, Math.max(0, Math.floor((ts-t0)/span*velas)))
+    const i = Math.min(nB-1, Math.max(0, Math.floor((ts-t0)/HORA)))
     buckets[i]++
   })
   const max = Math.max(...buckets, 1)
-  chart.innerHTML = buckets.map(n=>
-    `<div class="calbar${n>0?' ok':''}" style="height:${Math.max(4, Math.round(n/max*100))}%" title="${n} aplicaciones"></div>`
+  chart.innerHTML = buckets.map((n,i)=>
+    `<div class="calbar${n>0?' ok':''}" style="height:${Math.max(4, Math.round(n/max*100))}%" title="Hora ${i+1} de la jornada: ${n} aplicaciones"></div>`
   ).join('')
   $('stT0').textContent = fmt(t0)
-  $('stT1').textContent = fmt(t1)
+  $('stT1').textContent = fmt(t0 + nB*HORA)
+  renderDash()
+}
+// v9.6: dashboard global (solo Admin) — suma y segmentación por equipo de la
+// base de datos sincronizada desde los ESP32.
+function renderDash(){
+  const host = $('dashList')
+  if(!host) return
+  const series = Object.keys(db).sort()
+  if(series.length===0){ host.innerHTML='<div class="muted" style="font-size:12px">Aún no hay aplicaciones sincronizadas de ningún equipo.</div>'; return }
+  let totA=0, totG=0
+  host.innerHTML =
+    '<div class="row" style="font-size:10px;color:var(--muted2);text-transform:uppercase;margin-bottom:2px"><span style="flex:1.4">Equipo</span><span style="flex:1">Aplicaciones</span><span style="flex:1">Producto</span></div>'+
+    series.map(s=>{
+      const apps = Object.values(db[s].apps||{})
+      const g = apps.reduce((a,e)=>a+(e.grams||0),0)
+      totA += apps.length; totG += g
+      return `<div class="row" style="font-size:12px;padding:5px 0;border-top:1px solid var(--line)"><span style="flex:1.4;font-weight:700">&#128225; ${s}</span><span style="flex:1">${apps.length}</span><span style="flex:1">${Math.round(g)} g</span></div>`
+    }).join('')+
+    `<div class="row" style="font-size:12.5px;padding:6px 0;border-top:2px solid var(--line);font-weight:800"><span style="flex:1.4">TOTAL</span><span style="flex:1">${totA}</span><span style="flex:1">${Math.round(totG)} g</span></div>`
 }
 function renderPruebas(){
   // chip y segmento de modo
@@ -2151,6 +2211,34 @@ function renderOverlay(){
     ds==='cleaning' ? ('solo turbina · expulsa el residual · '+Math.max(0, Math.ceil((overlay.cleanMs-elapsed)/1000))+' s') : '—'
   paintBars(document.querySelectorAll('#ovBars .sb'), ds)
   if(state.fault){ const w=$('ovWarn'); w.style.display='block'; w.textContent = '⚠ '+(state.fault.code==='JAM'?'Atasco: revisar piñón/gránulos':'Sensor hall no detectado') }
+  // v9.6: el equipo ya está en reposo pero la línea de cierre se perdió (BLE):
+  // el progreso NO puede quedarse pegado — se cierra solo y la aplicación se
+  // registra con el conteo hall que sí llegó.
+  if(ds==='idle'){
+    if(!overlay.idleAt) overlay.idleAt = Date.now()
+    if(Date.now()-overlay.idleAt > 2500){
+      log('!! Cierre del ciclo no recibido: cierro el progreso ('+done+' cavidades contadas)')
+      if(session.active && done>0){
+        const hasFix = state.gpsFix && state.lat!=null
+        onDoseEvent({
+          id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
+          device_serial: $('serialTxt').textContent, session_id: 's-fallback',
+          ts_device: new Date().toISOString(), seq: 0,
+          gps_available: hasFix, lat: hasFix?state.lat:null, lon: hasFix?state.lon:null,
+          last_known_lat: hasFix?null:state.lastKnownLat, last_known_lon: hasFix?null:state.lastKnownLon,
+          grams: done*2, requested_grams: dose.dosis, hall_steps: done,
+          cycle: { turb_pct: dose.turb, tini_ms: dose.tini, tfin_ms: dose.tfin, retardo_ms: dose.retardo },
+          fw_version: '?', result: 'ok',
+        })
+      } else {
+        closeOverlay()
+      }
+      marcarFinCiclo()
+      render()
+    }
+  } else {
+    overlay.idleAt = 0
+  }
 }
 function renderEvents(){
   const host = $('eventList')
@@ -2253,6 +2341,8 @@ function applyProfileUi(){
   $('opSummary').style.display = 'none'
   // Vincular QR: solo Administrador (el acceso desde Dispositivos también)
   $('btnGoVincular').style.display = admin ? '' : 'none'
+  // dashboard global de equipos: solo Administrador
+  $('dashGlobal').style.display = admin ? '' : 'none'
   $('pwOperCard').style.display = admin ? '' : 'none'
   $('pfName').textContent = admin ? 'Administrador' : 'Operador'
   $('pfIcon').innerHTML = admin ? '&#9881;' : '&#128100;'
@@ -2942,6 +3032,12 @@ $('holdOpApply').onclick = ()=>{
   send(cmd.holdOp(ms))
   pushAlert('Pulsación sostenida para operación: '+(ms/1000)+' s','info')
 }
+// v9.6: respaldo de eventos en microSD (configurable, persistente en la tarjeta)
+$('sdSw').addEventListener('click', ()=>{
+  if(transport==='none'){ calMsg('⚠ Conecta el equipo primero.'); return }
+  const activar = !$('sdSw').classList.contains('on')
+  send('sd '+(activar?'on':'off'))
+})
 $('holdBtApply').onclick = ()=>{
   if(transport==='none'){ calMsg('⚠ Conecta el equipo primero.'); return }
   const ms = Math.max(1000, parseInt($('holdBtMs').value||'3000',10))
@@ -3067,8 +3163,7 @@ renderDumVel()
 applyVista()
 
 // ---------- selector de velas (estadísticas) ----------
-$('velasSel').innerHTML = [4,6,8,12].map(v=>`<span class="retchip" data-v="${v}">${v} velas</span>`).join('')
-document.querySelectorAll('#velasSel .retchip').forEach(c=> c.addEventListener('click', ()=>{ velas=Number(c.dataset.v); render() }))
+// v9.6: el diagrama ya no usa velas configurables — barras fijas de 1 hora.
 
 // ---------- vinculación por QR (etiqueta en la tarjeta y en el equipo) ----------
 let qrDevices = {}
