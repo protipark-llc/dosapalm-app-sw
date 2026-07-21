@@ -291,7 +291,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-18 21:46 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-21 21:08 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -529,7 +529,21 @@
             </div>
             <div class="muted" style="font-size:11.5px">Una tarjeta <b>nueva o recién programada</b> avisa que no está configurada. Este botón le envía TODA la configuración actual de la app (retardo y PWM fijo, dosis, tiempos, turbina, atasco, rearme y frecuencias) y la marca como configurada.</div>
             <button class="btn primary block" id="btnSendCfg" style="margin-top:10px">&#128228; Enviar configuración a la tarjeta</button>
+            <button class="btn ghost block" id="btnStartOp" style="margin-top:8px">&#9654; Iniciar toma de datos (operación)</button>
             <div class="hint" id="cfgMsg"></div>
+            <div style="display:flex;gap:7px;align-items:center;margin-top:10px">
+              <span style="font-size:12px;flex-shrink:0">Pulsación operación</span>
+              <input type="number" id="holdOpMs" class="numin" value="5000" min="1000" step="500" style="flex:1"/>
+              <span class="muted" style="font-size:11px">ms</span>
+              <button class="btn ghost" id="holdOpApply">Aplicar</button>
+            </div>
+            <div style="display:flex;gap:7px;align-items:center;margin-top:8px">
+              <span style="font-size:12px;flex-shrink:0">Pulsación Bluetooth</span>
+              <input type="number" id="holdBtMs" class="numin" value="3000" min="1000" step="500" style="flex:1"/>
+              <span class="muted" style="font-size:11px">ms</span>
+              <button class="btn ghost" id="holdBtApply">Aplicar</button>
+            </div>
+            <div class="note">Sostener el pulsador físico ese tiempo alterna la <b>operación</b> (toma de datos, LED rojo titilando cada 300 ms) o el <b>Bluetooth/config</b>. La de Bluetooth debe ser menor que la de operación. Quedan guardadas en la tarjeta.</div>
           </div>
 
           <div class="card">
@@ -897,6 +911,11 @@ var DosapalmProtocol = (() => {
     /** v9.2: bandera de tarjeta configurada — consultar / marcar tras enviar todo. */
     configurado: () => "configurado",
     configuradoOk: () => "configurado ok",
+    /** v9.4: estado de OPERACIÓN (toma de datos, LED rojo titilando 300 ms). */
+    operacion: (on) => `operacion ${on ? "on" : "off"}`,
+    /** v9.4: duración de la pulsación sostenida del botón físico (mín. 1 s). */
+    holdOp: (ms) => `hold op ${Math.max(1e3, Math.round(ms))}`,
+    holdBt: (ms) => `hold bt ${Math.max(1e3, Math.round(ms))}`,
     /** v8.3: timeout del guardián de atasco (persistente en el equipo). */
     atasco: (ms) => `atasco ${Math.max(500, Math.round(ms))}`,
     /**
@@ -1540,6 +1559,7 @@ function onOpen(kind){
   }, 4000)
   send(cmd.status()); send(cmd.modo('real')); send(cmd.log(true))
   send(cmd.configurado())   // v9.2: ¿la tarjeta ya tiene configuración aplicada?
+  send('operacion')         // v9.4: sincronizar el estado de toma de datos
 }
 function connect(){
   const host = $('host').value.trim()||'localhost', port = $('port').value.trim()||'8081'
@@ -1669,6 +1689,16 @@ function onLine(line){
   let mRe
   if((mRe = /Rearme anti-repeticion = (\d+) ms/.exec(line))) appRearmeMs = Number(mRe[1])
   else if((mRe = /\| rearme (\d+) ms/.exec(line))) appRearmeMs = Number(mRe[1])
+  // v9.4: estado de operación reportado por el equipo (app y tarjeta en sincronía)
+  if(/OPERACION: ACTIVA/.test(line)){ setOperacionApp(true, true) }
+  else if(/OPERACION: DETENIDA/.test(line)){ setOperacionApp(false, true) }
+  // v9.3: bloqueo del firmware por tarjeta sin configurar
+  if(/DOSIFICAR BLOQUEADO: tarjeta SIN CONFIGURAR/.test(line)){
+    if(expectingStart){ expectingStart = false; clearTimeout(startTimeout) }
+    boardConfigured = false
+    pushAlert('El equipo rechazó el ciclo: tarjeta SIN CONFIGURAR. Ve a Configuración y envíale la configuración.','alta')
+    render()
+  }
   // v9.1: aviso del bloqueo anti-repetición del equipo. La app ADOPTA el reloj
   // del equipo: aunque la página se haya recargado, la cuenta regresiva arranca.
   const mBloq = /DOSIFICAR BLOQUEADO: anti-repeticion \((\d+) ms desde el ultimo ciclo; rearme (\d+) ms\)/.exec(line)
@@ -1792,6 +1822,11 @@ function pushAlert(msg, sev){ alerts.unshift({msg, sev, ts:Date.now()}); render(
 // ---------- ejecutar ciclo ----------
 function ejecutar(){
   if(transport==='none'){ log('!! Conecta el equipo primero (Wi-Fi o Bluetooth)'); return }
+  // v9.3: tarjeta nueva sin configurar → primero calibrar/enviar configuración
+  if(boardConfigured===false){
+    pushAlert('La tarjeta está SIN CONFIGURAR: ve a Configuración, calibra y toca "Enviar configuración a la tarjeta" antes de dosificar.','alta')
+    return
+  }
   send(cmd.modo('real'))
   send(cmd.motor('turb', dose.turb))
   // La máquina dosifica MÁS para compensar la pérdida de la manguera, y el
@@ -2466,7 +2501,10 @@ function renderExecBtn(){
   const b = $('btnDosificar')
   if(overlay.open) return   // ciclo en curso: el overlay manda
   const rest = rearmeRestante()
-  if(expectingStart){
+  if(boardConfigured===false){
+    b.disabled = true
+    b.innerHTML = '<span class="aic">&#9881;</span>Configurar primero<span class="asub">tarjeta nueva: envía la configuración en Configuración</span>'
+  } else if(expectingStart){
     b.disabled = true
     b.innerHTML = '<span class="aic">&#8987;</span>Iniciando…<span class="asub">esperando confirmación del equipo</span>'
   } else if(rest > 0){
@@ -2480,11 +2518,20 @@ function renderExecBtn(){
 setInterval(renderExecBtn, 400)
 // Parar SIEMPRE cierra la ventana del ciclo, responda o no el equipo.
 $('btnParar').onclick = ()=>{ send(cmd.parar()); closeOverlay(); render() }
-$('btnSession').onclick = ()=>{
-  if(session.active){ session.active=false }
-  else { session.active=true; session.applications=0; session.grams=0; session.gramsReal=0; session.events=[]; session.startedAt=Date.now(); newTracker() }
+// v9.4: la operación (toma de datos) vive TAMBIÉN en la tarjeta — LED rojo
+// titilando 300 ms. App y equipo se mantienen sincronizados en ambos sentidos.
+function setOperacionApp(on, desdeEquipo){
+  const cambio = on !== session.active
+  if(on && !session.active){
+    session.active=true; session.applications=0; session.grams=0; session.gramsReal=0; session.events=[]; session.startedAt=Date.now(); newTracker()
+  } else if(!on && session.active){
+    session.active=false
+  }
+  if(cambio && !desdeEquipo && transport!=='none') send(cmd.operacion(on))
+  if(cambio && desdeEquipo) pushAlert(on ? 'Operación iniciada desde el equipo (pulsador sostenido)' : 'Operación detenida desde el equipo','info')
   render()
 }
+$('btnSession').onclick = ()=> setOperacionApp(!session.active)
 $('btnExport').onclick = ()=>{
   const feats = session.events.map(ev=>{ const c = ev.gps_available?[ev.lon,ev.lat]:[ev.last_known_lon,ev.last_known_lat]; return c[0]==null?null:({type:'Feature',geometry:{type:'Point',coordinates:c},properties:{grams:ev.grams,result:ev.result,id:ev.id}}) }).filter(Boolean)
   const blob = new Blob([JSON.stringify({type:'FeatureCollection',features:feats},null,2)],{type:'application/geo+json'})
@@ -2836,8 +2883,31 @@ $('btnSendCfg').onclick = ()=>{
   send(cmd.atasco(Math.max(500, parseInt($('atascoMs').value||'5000',10))))
   send(cmd.rearme(Math.max(0, parseInt($('rearmeMs').value||'2000',10)||0)))
   send(cmd.freq('turb', pwmFreq.turb)); send(cmd.freq('dosf', pwmFreq.dosf)); send(cmd.freq('tol', pwmFreq.tol))
+  // v9.4: pulsaciones sostenidas del botón físico
+  send(cmd.holdOp(Math.max(1000, parseInt($('holdOpMs').value||'5000',10))))
+  send(cmd.holdBt(Math.max(1000, parseInt($('holdBtMs').value||'3000',10))))
   send(cmd.configuradoOk())
   $('cfgMsg').textContent = 'Configuración enviada — esperando la confirmación de la tarjeta…'
+}
+// v9.4: iniciar la toma de datos (operación) desde Configuración
+$('btnStartOp').onclick = ()=>{
+  if(transport==='none'){ $('cfgMsg').textContent='⚠ Conecta el equipo primero (botón de Bluetooth en Inicio).'; return }
+  setOperacionApp(true)
+  $('cfgMsg').textContent = 'Operación iniciada: la tarjeta titila el LED rojo cada 300 ms y las aplicaciones quedan en Data.'
+}
+$('holdOpApply').onclick = ()=>{
+  if(transport==='none'){ calMsg('⚠ Conecta el equipo primero.'); return }
+  const ms = Math.max(1000, parseInt($('holdOpMs').value||'5000',10))
+  $('holdOpMs').value = ms
+  send(cmd.holdOp(ms))
+  pushAlert('Pulsación sostenida para operación: '+(ms/1000)+' s','info')
+}
+$('holdBtApply').onclick = ()=>{
+  if(transport==='none'){ calMsg('⚠ Conecta el equipo primero.'); return }
+  const ms = Math.max(1000, parseInt($('holdBtMs').value||'3000',10))
+  $('holdBtMs').value = ms
+  send(cmd.holdBt(ms))
+  pushAlert('Pulsación sostenida para Bluetooth: '+(ms/1000)+' s','info')
 }
 $('rearmeApply').onclick = ()=>{
   if(transport==='none'){ calMsg('⚠ Conecta el equipo primero.'); return }
