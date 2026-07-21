@@ -291,7 +291,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-21 21:08 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-21 21:14 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -2290,12 +2290,16 @@ $('dPlus').onclick = ()=> changeDosis(1)
 // El selector de retardo de Dosificar solo ofrece los retardos CALIBRADOS en
 // Pruebas (con duty medido). Los demás aparecen en gris y no son seleccionables.
 function renderRetardoOptions(){
-  const html = RETARDOS.map(v=>{
+  // el 👁 de la tabla de calibración decide qué retardos se ofrecen en Dosificar
+  let html = RETARDOS.filter(v=> !(calResults[v] && calResults[v].hide)).map(v=>{
     const r = calResults[v]
     const cal = !!(r && r.dutyPct!=null)
     const label = v===0 ? '0 — sin control (velocidad fija)' : v+' ms por cavidad'
     return `<option value="${v}"${cal?'':' disabled style="color:#9aa1ad"'}>${label}${cal?' · '+r.dutyPct+'%':' — sin calibrar'}</option>`
   }).join('')
+  if(calResults[dose.retardo] && calResults[dose.retardo].hide){
+    html = `<option value="${dose.retardo}" disabled style="color:#9aa1ad">${dose.retardo} ms (oculto en Configuración)</option>` + html
+  }
   const sel = $('inRetardo')
   sel.innerHTML = html
   sel.value = dose.retardo
@@ -2364,19 +2368,27 @@ function renderTurbVel(){
   if(window.__dumReady) renderDumVel()   // y el card de Velocidad de la vista Sencilla
   $('tvList').innerHTML = turbVel.length===0
     ? '<div class="muted" style="font-size:12px">Sin velocidades calibradas todavía.</div>'
-    : '<div class="row" style="font-size:10px;color:var(--muted2);text-transform:uppercase;margin-bottom:2px"><span style="flex:1">Turbina</span><span style="flex:1">Velocidad</span><span style="flex:1">Alt. palma</span><span style="width:42px"></span></div>'+
+    : '<div class="row" style="font-size:10px;color:var(--muted2);text-transform:uppercase;margin-bottom:2px"><span style="flex:1">Turbina</span><span style="flex:1">Velocidad</span><span style="flex:1">Alt. palma</span><span style="width:64px"></span></div>'+
       turbVel.slice().sort((a,b)=>a.pct-b.pct).map(e=>{
         const enUso = e.pct===dose.turb
-        return `<div class="row" style="font-size:12px;padding:5px 0;border-top:1px solid var(--line)${enUso?';background:#fff8f2':''}">`+
+        return `<div class="row" style="font-size:12px;padding:5px 0;border-top:1px solid var(--line)${enUso?';background:#fff8f2':''}${e.hide?';opacity:.55':''}">`+
           `<span style="flex:1;font-weight:700">${e.pct}%${enUso?' <span class="muted" style="font-size:9px">(en uso)</span>':''}</span>`+
           `<span style="flex:1;font-weight:700">${e.ms} m/s</span>`+
           `<span style="flex:1">${e.alt!=null ? e.alt+' m' : '—'}</span>`+
-          `<button data-tvedit="${e.pct}" title="Editar esta fila" style="width:20px;height:24px;border:none;background:none;color:#3d6db5;font-size:13px;cursor:pointer">✎</button>`+
+          `<button data-tveye="${e.pct}" title="${e.hide?'Oculta en Dosificar — tocar para mostrarla':'Visible en Dosificar — tocar para ocultarla'}" style="width:20px;height:24px;border:none;background:none;font-size:13px;cursor:pointer;${e.hide?'opacity:.35;filter:grayscale(1)':''}">&#128065;</button>`+
+          `<button data-tvedit="${e.pct}" title="Editar esta fila" style="width:20px;height:24px;margin-left:2px;border:none;background:none;color:#3d6db5;font-size:13px;cursor:pointer">✎</button>`+
           `<button data-tvdel="${e.pct}" title="Eliminar" style="width:20px;height:24px;margin-left:2px;border:none;background:none;color:#c0392b;font-size:13px;font-weight:700;cursor:pointer">✕</button>`+
         `</div>`
       }).join('')
   document.querySelectorAll('[data-tvdel]').forEach(b=> b.addEventListener('click', ()=>{
     turbVel = turbVel.filter(e=> e.pct!==Number(b.dataset.tvdel))
+    saveTurbVel(); renderTurbVel(); render()
+  }))
+  // 👁 mostrar/ocultar la velocidad en la vista de Dosificar
+  document.querySelectorAll('[data-tveye]').forEach(b=> b.addEventListener('click', ()=>{
+    const e = turbVel.find(x=> x.pct===Number(b.dataset.tveye))
+    if(!e) return
+    e.hide = !e.hide
     saveTurbVel(); renderTurbVel(); render()
   }))
   // ✎ carga la fila en los campos: se corrige y se vuelve a Guardar
@@ -2447,10 +2459,11 @@ renderPnList()
 // el % de duty asociado viaja por debajo (value de cada opción).
 function renderTurbVelOptions(){
   const sel = $('inTurbVel')
-  const ordenadas = turbVel.slice().sort((a,b)=>a.ms-b.ms)
+  // el 👁 de Configuración decide qué velocidades se ofrecen en Dosificar
+  const ordenadas = turbVel.filter(e=> !e.hide).slice().sort((a,b)=>a.ms-b.ms)
   let html = ordenadas.map(e=>`<option value="${e.pct}">${e.ms} m/s · ${e.pct}%</option>`).join('')
   if(ordenadas.length===0){
-    html = `<option value="${dose.turb}" disabled>— sin velocidades calibradas (Configuración)</option>`
+    html = `<option value="${dose.turb}" disabled>— sin velocidades visibles (Configuración)</option>`
   } else if(!ordenadas.some(e=> e.pct===dose.turb)){
     html = `<option value="${dose.turb}" disabled style="color:#9aa1ad">— seteo actual sin m/s calibrado</option>` + html
   }
@@ -2769,7 +2782,7 @@ function renderCalResults(){
   const keys = Object.keys(calResults).map(Number).sort((a,b)=>a-b)
   if(keys.length===0){ $('calResults').innerHTML=''; return }
   $('calResults').innerHTML = '<div class="card" style="padding:10px;margin-bottom:0">'+
-    '<div class="row" style="font-size:10px;color:var(--muted2);text-transform:uppercase;margin-bottom:4px"><span style="flex:1">Objetivo</span><span style="flex:1">Medido</span><span style="flex:.9">Duty</span><span style="flex:1">Desv.</span><span style="width:98px"></span></div>'+
+    '<div class="row" style="font-size:10px;color:var(--muted2);text-transform:uppercase;margin-bottom:4px"><span style="flex:1">Objetivo</span><span style="flex:1">Medido</span><span style="flex:.9">Duty</span><span style="flex:1">Desv.</span><span style="width:120px"></span></div>'+
     keys.map(p=>{
       const r = calResults[p]
       const sinDatos = r.avg==null
@@ -2778,7 +2791,7 @@ function renderCalResults(){
       const color = sinDatos ? '#c0392b' : (Math.abs(dev)<=15 ? '#2f8a34' : (Math.abs(dev)<=30 ? '#b9791a' : '#c0392b'))
       const enUso = dose.retardo===p ? ' style="background:#fff8f2"' : ''
       const playing = calPlaying===p
-      return `<div class="row"${enUso} data-calrow="${p}" style="font-size:12px;padding:5px 0;border-top:1px solid var(--line)">`+
+      return `<div class="row"${enUso} data-calrow="${p}" style="font-size:12px;padding:5px 0;border-top:1px solid var(--line)${r.hide?';opacity:.55':''}">`+
         `<span style="flex:1;font-weight:700">${p} ms${dose.retardo===p?' <span class="muted" style="font-size:9px">(en uso)</span>':''}</span>`+
         `<span style="flex:1">${sinDatos?'—':r.avg+' ms'}</span>`+
         `<span style="flex:.9;font-weight:700">${r.dutyPct!=null?r.dutyPct+'%':'—'}</span>`+
@@ -2787,6 +2800,7 @@ function renderCalResults(){
           ? `<button data-calplay="${p}" title="${playing?'Pausar':'Girar indefinido al '+r.dutyPct+'% constante'}" style="width:28px;height:26px;border:1px solid var(--line);border-radius:7px;background:${playing?'#12261c':'none'};color:${playing?'#cfe3d6':'#2f8a34'};font-size:11px;cursor:pointer">${playing?'&#10074;&#10074;':'&#9654;'}</button>`
           : `<span style="width:28px"></span>`)+
         `<button class="btn ghost" data-calapply="${p}" style="width:48px;padding:5px 0;font-size:11px;margin-left:2px">Usar</button>`+
+        `<button data-caleye="${p}" title="${r.hide?'Oculto en Dosificar — tocar para mostrarlo':'Visible en Dosificar — tocar para ocultarlo'}" style="width:20px;height:26px;margin-left:2px;border:none;background:none;font-size:13px;cursor:pointer;${r.hide?'opacity:.35;filter:grayscale(1)':''}">&#128065;</button>`+
         `<button data-caldel="${p}" title="Eliminar esta fila" style="width:20px;height:26px;margin-left:2px;border:none;background:none;color:#c0392b;font-size:13px;font-weight:700;cursor:pointer">✕</button>`+
       `</div>`
     }).join('')+
@@ -2811,6 +2825,13 @@ function renderCalResults(){
     const p = Number(b.dataset.caldel)
     if(calPlaying===p) calPlayStop()
     delete calResults[p]
+    saveCalResults(); renderCalResults(); render()
+  }))
+  // 👁 mostrar/ocultar el retardo en el selector de Dosificar
+  document.querySelectorAll('[data-caleye]').forEach(b=> b.addEventListener('click', ()=>{
+    const r = calResults[Number(b.dataset.caleye)]
+    if(!r) return
+    r.hide = !r.hide
     saveCalResults(); renderCalResults(); render()
   }))
   document.querySelectorAll('[data-calplay]').forEach(b=> b.addEventListener('click', ()=>{
@@ -3004,9 +3025,10 @@ $('dumRet').addEventListener('change', ()=>{ $('inRetardo').value=$('dumRet').va
 // el card de Velocidad muestra TODAS las velocidades creadas (calibradas)
 function renderDumVel(){
   const host = $('dumVelRow')
-  const ordenadas = turbVel.slice().sort((a,b)=>a.ms-b.ms)
+  // el 👁 de Configuración decide qué velocidades se ofrecen en Dosificar
+  const ordenadas = turbVel.filter(e=> !e.hide).slice().sort((a,b)=>a.ms-b.ms)
   if(ordenadas.length===0){
-    host.innerHTML = '<div class="muted" style="font-size:11px">Sin velocidades calibradas todavía — regístralas en Configuración.</div>'
+    host.innerHTML = '<div class="muted" style="font-size:11px">Sin velocidades visibles — regístralas o actívalas (👁) en Configuración.</div>'
     return
   }
   host.innerHTML = ordenadas.map((e,i)=>{
