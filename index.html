@@ -291,7 +291,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-21 21:14 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-21 21:24 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -1950,6 +1950,12 @@ function render(){
     : ('<span class="aic">&#9654;</span>Iniciar operación<span class="asub">guarda las aplicaciones en Data</span>')
   $('btnSession').classList.toggle('on', session.active)
   $('btnSession').title = session.active ? ('Operación activa desde '+fmt(session.startedAt)+' · perfil '+profile) : 'Inicia una operación para acumular las aplicaciones'
+  // el botón de Configuración es el MISMO toggle de la toma de datos
+  $('btnStartOp').innerHTML = session.active
+    ? '&#9632; Parar toma de datos y guardar sesión'
+    : '&#9654; Iniciar toma de datos (operación)'
+  $('btnStartOp').classList.toggle('red', session.active)
+  $('btnStartOp').classList.toggle('ghost', !session.active)
   renderEvents()
   renderMap()
   renderStats()
@@ -2910,11 +2916,15 @@ $('btnSendCfg').onclick = ()=>{
   send(cmd.configuradoOk())
   $('cfgMsg').textContent = 'Configuración enviada — esperando la confirmación de la tarjeta…'
 }
-// v9.4: iniciar la toma de datos (operación) desde Configuración
+// v9.4: iniciar/parar la toma de datos (operación) desde Configuración —
+// el MISMO botón alterna: iniciar ↔ parar y guardar la sesión.
 $('btnStartOp').onclick = ()=>{
   if(transport==='none'){ $('cfgMsg').textContent='⚠ Conecta el equipo primero (botón de Bluetooth en Inicio).'; return }
-  setOperacionApp(true)
-  $('cfgMsg').textContent = 'Operación iniciada: la tarjeta titila el LED rojo cada 300 ms y las aplicaciones quedan en Data.'
+  const iniciar = !session.active
+  setOperacionApp(iniciar)
+  $('cfgMsg').textContent = iniciar
+    ? 'Operación iniciada: la tarjeta titila el LED rojo cada 300 ms y las aplicaciones quedan en Data.'
+    : 'Toma de datos detenida: la sesión quedó guardada en Data ('+session.applications+' aplicaciones).'
 }
 $('holdOpApply').onclick = ()=>{
   if(transport==='none'){ calMsg('⚠ Conecta el equipo primero.'); return }
