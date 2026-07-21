@@ -291,7 +291,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-21 21:24 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-21 22:55 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -1426,8 +1426,8 @@ const RETARDOS = [0,100,200,250,300,400,500,600,700]
 // perdida: % que se pierde en la manguera (medido en campo: 50–60%). La dosis
 // que fija el usuario es la FINAL (salida de la manguera); la máquina dosifica
 // dosis/(1-perdida) para compensar.
-// Defaults de fábrica: turbina 40% (10 m/s), retardo 500 ms calibrado (100% fijo)
-const dose = { dosis:15, turb:40, tini:2500, tfin:3500, retardo:500, dutyFijo:100, perdida:60, gcav:2 }
+// Defaults de fábrica (21 jul): turbina 30% (12 m/s), retardo 700 ms (92% fijo)
+const dose = { dosis:15, turb:30, tini:2500, tfin:3500, retardo:700, dutyFijo:92, perdida:60, gcav:2 }
 function perdidaPct(){ return Math.min(90, Math.max(0, Number(dose.perdida)||0)) }
 // gramos que debe dosificar la MÁQUINA para que llegue dose.dosis al final
 function dosisMaquina(){ return dose.dosis<=0 ? 0 : Math.round(dose.dosis/(1-perdidaPct()/100)) }
@@ -1442,8 +1442,11 @@ function dosisComando(){ return pulsosNecesarios()*2 }
 // ---------- pérdidas calibradas por seteo (turbina % + retardo ms) ----------
 // La pérdida de la manguera VARÍA con la turbina y el retardo. Se calibran en
 // Pruebas y Dosificar aplica automáticamente la del seteo activo.
-// Medición de campo precargada: turbina 60% · 500 ms → 60% de pérdida.
-let perdidas = [{ turb:60, ret:500, per:60 }]
+// Mediciones de campo precargadas (21 jul): 10 y 12 m/s × 500/600/700 ms → 60%.
+let perdidas = [
+  { turb:20, ret:500, per:60 }, { turb:20, ret:600, per:60 }, { turb:20, ret:700, per:60 },
+  { turb:30, ret:500, per:60 }, { turb:30, ret:600, per:60 }, { turb:30, ret:700, per:60 },
+]
 try{ const s=JSON.parse(localStorage.getItem('dp_perdidas')||'null'); if(Array.isArray(s)) perdidas=s }catch(e){}
 function savePerdidas(){ try{ localStorage.setItem('dp_perdidas', JSON.stringify(perdidas)) }catch(e){} }
 function perdidaCalibrada(){ return perdidas.find(e=> e.turb===dose.turb && e.ret===dose.retardo) || null }
@@ -1455,9 +1458,10 @@ function savePinones(){ try{ localStorage.setItem('dp_pinones', JSON.stringify(p
 function pinonActivo(){ return pinones.find(p=> p.name===dose.pinon) || pinones[0] }
 // velocidades de turbina calibradas: % de potencia (duty) → m/s medidos.
 // Datos de fábrica (medición de campo, 16 jul 2026):
+// (21 jul): 15 y 21 m/s visibles en Dosificar; 10 y 12 m/s ocultas (ojito).
 let turbVel = [
-  { pct:20, ms:5,  alt:3 },
-  { pct:40, ms:10, alt:6 },
+  { pct:20, ms:10, alt:3, hide:true },
+  { pct:30, ms:12, alt:6, hide:true },
   { pct:71, ms:15, alt:3 },
   { pct:78, ms:21, alt:6 },   // máx. recomendado
 ]
@@ -1746,7 +1750,12 @@ function onLine(line){
   }
   if(parsed.t==='doseDosing'){ overlay.stageStart = Date.now() }
   if(parsed.t==='doseCleaning'){ overlay.stageStart = Date.now(); if(parsed.cleanMs>0) overlay.cleanMs = parsed.cleanMs }
-  if(parsed.t==='fault'){ pushAlert(parsed.code==='JAM'?'Atasco en el dosificador':'Sensor hall no detectado', 'alta') }
+  if(parsed.t==='fault'){
+    // v9.5: el firmware ya hace SAFE completo; la app lo refuerza por si la
+    // tarjeta tiene un firmware anterior que dejaba la tolva girando.
+    send(cmd.safe())
+    pushAlert((parsed.code==='JAM'?'Atasco en el dosificador':'Sensor hall no detectado')+' — SAFE: todos los motores apagados', 'alta')
+  }
   // calibración: registrar el instante (reloj del equipo) de cada pulso hall
   if(parsed.t==='hall'){
     const ts = stripTimestamp(line).ms
