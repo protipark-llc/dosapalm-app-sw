@@ -294,7 +294,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-22 00:17 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-22 00:22 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -1709,11 +1709,15 @@ function onLine(line){
     }
     render()
   } else if(/CONFIGURADO: SI/.test(line)){
-    if(boardConfigured===false){
-      pushAlert('✓ Tarjeta marcada como configurada','info')
-      $('cfgMsg').textContent = '✓ La tarjeta confirmó: configurada.'
-    }
+    if(boardConfigured===false) pushAlert('✓ Tarjeta marcada como configurada','info')
     boardConfigured = true
+    // la confirmación SIEMPRE cierra el "esperando…" — también cuando la
+    // tarjeta ya estaba configurada y solo se reenvió la configuración.
+    if(/marcado por la app/.test(line) || $('cfgMsg').textContent.indexOf('esperando')>=0){
+      clearTimeout(cfgTimeout)
+      $('cfgMsg').textContent = '✓ La tarjeta confirmó: configuración aplicada.'
+      pushAlert('Configuración aplicada y confirmada por la tarjeta','info')
+    }
     render()
   }
   // La app mantiene su ventana de rearme sincronizada con la del equipo.
@@ -3061,7 +3065,15 @@ $('btnSendCfg').onclick = ()=>{
   send(cmd.holdBt(Math.max(1000, parseInt($('holdBtMs').value||'3000',10))))
   send(cmd.configuradoOk())
   $('cfgMsg').textContent = 'Configuración enviada — esperando la confirmación de la tarjeta…'
+  // si en 8 s no llega la confirmación (BLE caído, tarjeta sin responder), avisar
+  clearTimeout(cfgTimeout)
+  cfgTimeout = setTimeout(()=>{
+    if($('cfgMsg').textContent.indexOf('esperando')>=0){
+      $('cfgMsg').textContent = '⚠ El equipo no confirmó en 8 s. Revisa la conexión (Inicio) y vuelve a intentar.'
+    }
+  }, 8000)
 }
+let cfgTimeout = null
 // v9.4: iniciar/parar la toma de datos (operación) desde Configuración —
 // el MISMO botón alterna: iniciar ↔ parar y guardar la sesión.
 $('btnStartOp').onclick = ()=>{
