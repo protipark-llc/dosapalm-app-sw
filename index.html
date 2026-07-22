@@ -291,7 +291,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-21 23:30 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-22 00:07 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -1307,6 +1307,7 @@ var DosapalmProtocol = (() => {
       this.ctx = ctx;
       __publicField(this, "seqCounter", 0);
       __publicField(this, "open", null);
+      __publicField(this, "lastCloseAt", 0);
     }
     now() {
       return this.ctx.now ? this.ctx.now() : /* @__PURE__ */ new Date();
@@ -1343,6 +1344,7 @@ var DosapalmProtocol = (() => {
           if (this.open) this.open.cleanMs = p.cleanMs;
           return null;
         case "doseDone":
+          if (!this.open && Date.now() - this.lastCloseAt < 5e3) return null;
           return this.close(state, p.grams, "ok");
         case "doseStopped":
           if (!this.open) return null;
@@ -1357,6 +1359,7 @@ var DosapalmProtocol = (() => {
     close(state, grams, result) {
       const o = this.open;
       this.open = null;
+      this.lastCloseAt = Date.now();
       this.seqCounter += 1;
       const hasFix = state.gpsFix && state.lat !== null && state.lon !== null;
       return {
@@ -1727,6 +1730,16 @@ function onLine(line){
       fix:mEvt[5]==='1', lat:Number(mEvt[6]), lon:Number(mEvt[7]), retardo:Number(mEvt[11]),
       result:mEvt[12], syncedAt:Date.now(),
     })
+    // v9.7: el EVT es la confirmación AUTORITATIVA del equipo. Si la línea de
+    // "completado" se perdió (overlay aún abierto), el EVT cierra el ciclo con
+    // los gramos EXACTOS del equipo.
+    if(nuevo && overlay.open){
+      log('!! Ciclo cerrado por el evento EVT del equipo (línea de completado perdida)')
+      const res = mEvt[12]==='ok' ? 'ok' : (mEvt[12]==='partial' ? 'partial' : 'error')
+      if(session.active) onDoseEvent(synthDoseEvent(Number(mEvt[3]), res))
+      else closeOverlay()
+      marcarFinCiclo()
+    }
     if(nuevo) render()
   }
   // v9.6: estado del respaldo microSD reportado por el equipo
@@ -1843,6 +1856,20 @@ function closeOverlay(){
   clearTimeout(ovWatchdog)
   clearInterval(ovTicker); ovTicker = null
   $('cycOverlay').classList.remove('show')
+}
+// v9.7: evento sintetizado con lo que la app SÍ sabe (para líneas perdidas)
+function synthDoseEvent(grams, result){
+  const hasFix = state.gpsFix && state.lat!=null
+  return {
+    id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
+    device_serial: $('serialTxt').textContent, session_id: 's-fallback',
+    ts_device: new Date().toISOString(), seq: 0,
+    gps_available: hasFix, lat: hasFix?state.lat:null, lon: hasFix?state.lon:null,
+    last_known_lat: hasFix?null:state.lastKnownLat, last_known_lon: hasFix?null:state.lastKnownLon,
+    grams: grams, requested_grams: dose.dosis, hall_steps: Math.max(0, state.hall-overlay.hallStart),
+    cycle: { turb_pct: dose.turb, tini_ms: dose.tini, tfin_ms: dose.tfin, retardo_ms: dose.retardo },
+    fw_version: '?', result: result,
+  }
 }
 function onDoseEvent(ev){
   closeOverlay()
@@ -2211,33 +2238,31 @@ function renderOverlay(){
     ds==='cleaning' ? ('solo turbina · expulsa el residual · '+Math.max(0, Math.ceil((overlay.cleanMs-elapsed)/1000))+' s') : '—'
   paintBars(document.querySelectorAll('#ovBars .sb'), ds)
   if(state.fault){ const w=$('ovWarn'); w.style.display='block'; w.textContent = '⚠ '+(state.fault.code==='JAM'?'Atasco: revisar piñón/gránulos':'Sensor hall no detectado') }
-  // v9.6: el equipo ya está en reposo pero la línea de cierre se perdió (BLE):
-  // el progreso NO puede quedarse pegado — se cierra solo y la aplicación se
-  // registra con el conteo hall que sí llegó.
+  // v9.7: GUARDIAS POR TIEMPO — no dependen de recibir ninguna línea. Aunque
+  // el Bluetooth pierda los mensajes de cierre, el overlay NUNCA sigue contando.
+  const cerrarPerdido = (motivo, resultado)=>{
+    log('!! '+motivo+' — cierro el progreso ('+done+' cavidades contadas)')
+    if(session.active && done>0) onDoseEvent(synthDoseEvent(done*2, resultado))
+    else closeOverlay()
+    marcarFinCiclo()
+    render()
+  }
   if(ds==='idle'){
+    // el equipo ya reporta reposo: cerrar de inmediato tras una breve espera
     if(!overlay.idleAt) overlay.idleAt = Date.now()
-    if(Date.now()-overlay.idleAt > 2500){
-      log('!! Cierre del ciclo no recibido: cierro el progreso ('+done+' cavidades contadas)')
-      if(session.active && done>0){
-        const hasFix = state.gpsFix && state.lat!=null
-        onDoseEvent({
-          id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
-          device_serial: $('serialTxt').textContent, session_id: 's-fallback',
-          ts_device: new Date().toISOString(), seq: 0,
-          gps_available: hasFix, lat: hasFix?state.lat:null, lon: hasFix?state.lon:null,
-          last_known_lat: hasFix?null:state.lastKnownLat, last_known_lon: hasFix?null:state.lastKnownLon,
-          grams: done*2, requested_grams: dose.dosis, hall_steps: done,
-          cycle: { turb_pct: dose.turb, tini_ms: dose.tini, tfin_ms: dose.tfin, retardo_ms: dose.retardo },
-          fw_version: '?', result: 'ok',
-        })
-      } else {
-        closeOverlay()
-      }
-      marcarFinCiclo()
-      render()
-    }
+    if(Date.now()-overlay.idleAt > 2500) cerrarPerdido('Cierre del ciclo no recibido', 'ok')
   } else {
     overlay.idleAt = 0
+    if(ds==='cleaning' && elapsed > overlay.cleanMs + 4000){
+      // la limpieza final es POR TIEMPO: si ya venció de sobra, el equipo terminó
+      cerrarPerdido('La limpieza final ya terminó en el equipo (línea de cierre perdida)', 'ok')
+    } else if(ds==='dosing' && overlay.target>0 && done>=overlay.target && est>0 && trans > est + 5000){
+      // la dosis se completó por conteo hall pero el cambio de etapa se perdió
+      cerrarPerdido('Dosis completa por conteo hall (líneas de etapa perdidas)', 'ok')
+    } else if(est>0 && trans > est*2 + 15000){
+      // red global: nada debería durar el doble del estimado + 15 s
+      cerrarPerdido('El ciclo excedió el doble del tiempo estimado', done>=overlay.target ? 'ok' : 'partial')
+    }
   }
 }
 function renderEvents(){
