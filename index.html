@@ -294,7 +294,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-22 22:58 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-22 23:16 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -581,6 +581,17 @@
               <div style="height:12px;background:#eef1f5;border-radius:99px;overflow:hidden"><div id="memBarEv" style="height:100%;width:0%;background:var(--orange);border-radius:99px;transition:width .3s"></div></div>
             </div>
             <div class="note">La partición (app / datos) se fija al flashear el firmware — cambiar los tamaños requiere reflashear con otra tabla de particiones. Las sesiones guardadas ocupan la barra naranja; al sincronizar, la app las publica y le ordena al equipo <b>purgarlas</b> para mantener su memoria libre.</div>
+          </div>
+
+          <!-- v10.9: diff tarjeta vs app, con aprobación -->
+          <div class="card">
+            <div class="row"><span style="font-weight:700;font-size:13px">&#128269; Tarjeta vs App (diff)</span><span class="chip" id="diffChip"><span class="d"></span><span id="diffChipTxt">—</span></span></div>
+            <div id="diffList" class="muted" style="font-size:12px;margin-top:6px">Conéctate al equipo para comparar su configuración con la de la app.</div>
+            <div style="display:flex;gap:8px;margin-top:10px">
+              <button class="btn ghost" id="btnDiffAdopt" style="flex:1">&#11015; Adoptar los de la tarjeta</button>
+              <button class="btn primary" id="btnDiffPush" style="flex:1">&#11014; Enviar los de la app</button>
+            </div>
+            <div class="note">Al conectar una tarjeta, aquí aparece su configuración comparada con la de la app (las diferencias resaltadas). Aprueba en la dirección que quieras: <b>adoptar</b> lo que trae la tarjeta, o <b>enviar</b> (y guardar) lo que tiene la app.</div>
           </div>
 
           <div class="card">
@@ -1688,6 +1699,7 @@ function dbAdd(serial, seq, rec){
 // con esta bandera activa puebla los campos de Dosificar y Configuración.
 let syncCfgPending = false
 let syncCfgTimeout = null
+let boardCfg = null   // v10.9: configuración reportada por la tarjeta (para el diff)
 let syncNewCount = 0, syncNewTimer = null   // v10.7: resumen de sincronización
 let syncMaxSeq = 0                          // v10.8: para el ack/purga del equipo
 // v10.8: sondeo del estado de operación cada 10 s — aunque el Bluetooth pierda
@@ -1853,32 +1865,34 @@ function onLine(line){
     setOperacionApp(false, true)
     pedirDatosDelEquipo()   // v10.4: al cerrar la operación, refrescar lo guardado
   }
-  // v10.4: adopción de los datos guardados en el equipo (status con bandera)
+  // v10.9: los datos guardados del equipo se RECOLECTAN para el DIFF —
+  // ya no se adoptan solos: el admin aprueba en Configuración.
   if(syncCfgPending){
     let mCfg
     if((mCfg = /Dosif: dosis (\d+)g, retardo (\d+)ms, tini (\d+)ms, tfin (\d+)ms, turbReal (\d+)%, dutyFijo (\d+)%/.exec(line))){
-      const gMaq = Number(mCfg[1])
-      dose.retardo = Number(mCfg[2]); dose.tini = Number(mCfg[3]); dose.tfin = Number(mCfg[4])
-      dose.turb = Number(mCfg[5]); dose.dutyFijo = Number(mCfg[6])
-      // dosis final estimada desde la dosis de máquina del equipo
-      const cav = Math.round(gMaq/2)
-      dose.dosis = Math.max(0, Math.round(cav * gcavG() * (1 - perdidaPct()/100)))
-      syncPerdida()
-      saveDose(); renderRetardoOptions(); render()
-      pushAlert('Datos del equipo cargados: retardo '+dose.retardo+' ms · turbina '+dose.turb+'% · dosis de máquina '+gMaq+' g · PWM fijo '+dose.dutyFijo+'%','info')
+      boardCfg = boardCfg || {}
+      boardCfg.gMaq = Number(mCfg[1]); boardCfg.retardo = Number(mCfg[2]); boardCfg.tini = Number(mCfg[3])
+      boardCfg.tfin = Number(mCfg[4]); boardCfg.turb = Number(mCfg[5]); boardCfg.dutyFijo = Number(mCfg[6])
     }
     if((mCfg = /\| atasco (\d+) ms \| rearme (\d+) ms/.exec(line))){
-      $('atascoMs').value = mCfg[1]
-      $('rearmeMs').value = mCfg[2]
-      appRearmeMs = Number(mCfg[2])
+      boardCfg = boardCfg || {}
+      boardCfg.atasco = Number(mCfg[1]); boardCfg.rearme = Number(mCfg[2])
+      appRearmeMs = Number(mCfg[2])   // el espejo del rearme sí es automático (seguridad)
     }
     if((mCfg = /Pulsador: operacion (\d+) ms \| bluetooth (\d+) ms \| antirebote (\d+) ms/.exec(line))){
-      $('holdOpMs').value = mCfg[1]
-      $('holdBtMs').value = mCfg[2]
-      $('reboteMs').value = mCfg[3]
-      syncCfgPending = false   // última línea del bloque: sincronización completa
+      boardCfg = boardCfg || {}
+      boardCfg.holdOp = Number(mCfg[1]); boardCfg.holdBt = Number(mCfg[2]); boardCfg.rebote = Number(mCfg[3])
+      syncCfgPending = false   // última línea del bloque: recolección completa
       clearTimeout(syncCfgTimeout)
+      renderCfgDiff(true)
     }
+  }
+  // v10.9: el equipo rechazó iniciar la operación por falta de configuración
+  if(/OPERACION BLOQUEADA: tarjeta SIN CONFIGURAR/.test(line)){
+    boardConfigured = false
+    if(session.active) setOperacionApp(false, true)
+    pushAlert('El equipo rechazó la operación: tarjeta SIN CONFIGURAR. Ve a Configuración y envíale la configuración primero.','alta')
+    render()
   }
   // v10.2: bloqueo del firmware por operación inactiva
   if(/DOSIFICAR BLOQUEADO: sin OPERACION activa/.test(line)){
@@ -2558,13 +2572,18 @@ function applyProfileUi(){
   $('pfIcon').innerHTML = admin ? '&#9881;' : '&#128100;'
   $('perfilSub').textContent = admin ? 'Administrador' : 'Operador'
 }
-function doLogin(){
-  if($('loginPw').value !== getPw(loginSel)){ $('loginErr').style.display=''; return }
-  $('loginErr').style.display='none'; $('loginPw').value=''
-  profile = loginSel
+// v10.9: entrar a la app con un perfil (login o reingreso automático al recargar)
+function entrarApp(perfil){
+  profile = perfil
+  try{ localStorage.setItem('dp_login', perfil) }catch(e){}
   buildTabs(); newTracker(); applyProfileUi()
   if(transport==='none') connect()
   go('home'); render()
+}
+function doLogin(){
+  if($('loginPw').value !== getPw(loginSel)){ $('loginErr').style.display=''; return }
+  $('loginErr').style.display='none'; $('loginPw').value=''
+  entrarApp(loginSel)
 }
 $('btnLogin').onclick = doLogin
 $('loginPw').addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin() })
@@ -2597,6 +2616,7 @@ function cerrarSesionApp(){
   }catch(e){}
   transport = 'none'; bleRx = null
   setConn(false, 'Desconectado')
+  try{ localStorage.removeItem('dp_login') }catch(e){}   // v10.9: solo aquí se cierra de verdad
   log('== Sesión cerrada: equipo desconectado ==')
   go('login'); $('loginPw').value=''
 }
@@ -2875,6 +2895,11 @@ $('btnParar').onclick = ()=>{ send(cmd.parar()); closeOverlay(); render() }
 // v9.4: la operación (toma de datos) vive TAMBIÉN en la tarjeta — LED rojo
 // titilando 300 ms. App y equipo se mantienen sincronizados en ambos sentidos.
 function setOperacionApp(on, desdeEquipo){
+  // v10.9: sin tarjeta configurada no se puede iniciar la operación
+  if(on && !desdeEquipo && boardConfigured===false){
+    pushAlert('La tarjeta está SIN CONFIGURAR: envíale la configuración desde Configuración antes de iniciar la operación.','alta')
+    return
+  }
   const cambio = on !== session.active
   if(on && !session.active){
     session.active=true; session.applications=0; session.grams=0; session.gramsReal=0; session.events=[]; session.startedAt=Date.now(); newTracker()
@@ -3284,6 +3309,63 @@ $('sdSw').addEventListener('click', ()=>{
   const activar = !$('sdSw').classList.contains('on')
   send('sd '+(activar?'on':'off'))
 })
+// ---------- v10.9: diff tarjeta vs app con aprobación ----------
+function diffFilas(){
+  if(!boardCfg) return []
+  const b = boardCfg
+  return [
+    ['Dosis de máquina (g)', dosisComando(), b.gMaq],
+    ['Retardo (ms)', dose.retardo, b.retardo],
+    ['T. inicial (ms)', dose.tini, b.tini],
+    ['T. final (ms)', dose.tfin, b.tfin],
+    ['Turbina (%)', dose.turb, b.turb],
+    ['PWM fijo (%)', dose.dutyFijo||0, b.dutyFijo],
+    ['Atasco (ms)', parseInt($('atascoMs').value,10)||0, b.atasco],
+    ['Rearme (ms)', parseInt($('rearmeMs').value,10)||0, b.rearme],
+    ['Pulsación operación (ms)', parseInt($('holdOpMs').value,10)||0, b.holdOp],
+    ['Pulsación Bluetooth (ms)', parseInt($('holdBtMs').value,10)||0, b.holdBt],
+    ['Antirebote (ms)', parseInt($('reboteMs').value,10)||0, b.rebote],
+  ]
+}
+function renderCfgDiff(alertar){
+  const host = $('diffList')
+  if(!boardCfg){ host.innerHTML='Conéctate al equipo para comparar su configuración con la de la app.'; setChip($('diffChip'), false, '—', ''); return }
+  const filas = diffFilas()
+  const difs = filas.filter(f=> f[1]!==f[2] && f[2]!=null)
+  host.innerHTML =
+    '<div class="row" style="font-size:10px;color:var(--muted2);text-transform:uppercase;margin-bottom:2px"><span style="flex:1.6">Parámetro</span><span style="flex:1;text-align:right">App</span><span style="flex:1;text-align:right">Tarjeta</span></div>'+
+    filas.map(f=>{
+      const dif = f[1]!==f[2] && f[2]!=null
+      return `<div class="row" style="font-size:12px;padding:4px 0;border-top:1px solid var(--line)${dif?';background:#fff8f2;font-weight:700':''}">`+
+        `<span style="flex:1.6">${f[0]}</span>`+
+        `<span style="flex:1;text-align:right;color:${dif?'#c0392b':'inherit'}">${f[1]}</span>`+
+        `<span style="flex:1;text-align:right;color:${dif?'#2f8a34':'inherit'}">${f[2]!=null?f[2]:'—'}</span>`+
+      `</div>`
+    }).join('')
+  setChip($('diffChip'), difs.length===0, difs.length===0 ? 'Coinciden ✓' : difs.length+' diferencias', difs.length===0?'g':'a')
+  if(alertar && difs.length>0){
+    pushAlert('&#128269; La tarjeta trae '+difs.length+' configuraciones distintas a las de la app — revisa el diff en Configuración y aprueba.','warn')
+  }
+}
+$('btnDiffAdopt').onclick = ()=>{
+  if(!boardCfg){ pushAlert('Conéctate al equipo primero','warn'); return }
+  const b = boardCfg
+  dose.retardo = b.retardo; dose.tini = b.tini; dose.tfin = b.tfin
+  dose.turb = b.turb; dose.dutyFijo = b.dutyFijo
+  dose.dosis = Math.max(0, Math.round(Math.round(b.gMaq/2) * gcavG() * (1 - perdidaPct()/100)))
+  if(b.atasco!=null) $('atascoMs').value = b.atasco
+  if(b.rearme!=null){ $('rearmeMs').value = b.rearme; appRearmeMs = b.rearme }
+  if(b.holdOp!=null) $('holdOpMs').value = b.holdOp
+  if(b.holdBt!=null) $('holdBtMs').value = b.holdBt
+  if(b.rebote!=null) $('reboteMs').value = b.rebote
+  syncPerdida(); saveDose(); renderRetardoOptions(); render(); renderCfgDiff(false)
+  pushAlert('✓ La app adoptó la configuración de la tarjeta','info')
+}
+$('btnDiffPush').onclick = ()=>{
+  if(transport==='none'){ pushAlert('Conéctate al equipo primero','warn'); return }
+  $('btnSendCfg').click()          // envía TODO lo de la app + guardar + configurado ok
+  setTimeout(()=> pedirDatosDelEquipo(), 2500)   // refrescar el diff con lo aplicado
+}
 // v10.8: refrescar la distribución de memoria del equipo
 $('memRefresh').onclick = ()=>{
   if(transport==='none'){ $('memInfo').textContent='⚠ Conecta el equipo primero (botón de Bluetooth en Inicio).'; return }
@@ -3419,6 +3501,13 @@ function renderDumVel(){
 window.__dumReady = true
 renderDumVel()
 applyVista()
+
+// v10.9: recargar la página NO cierra la sesión — reingreso automático con el
+// perfil guardado (solo "Salir" la cierra de verdad).
+try{
+  const perfilGuardado = localStorage.getItem('dp_login')
+  if(perfilGuardado==='admin' || perfilGuardado==='operador') entrarApp(perfilGuardado)
+}catch(e){}
 
 // ---------- selector de velas (estadísticas) ----------
 // v9.6: el diagrama ya no usa velas configurables — barras fijas de 1 hora.
