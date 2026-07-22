@@ -294,7 +294,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-22 00:46 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-22 00:51 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -1586,6 +1586,9 @@ function onOpen(kind){
       log('!! Sin respuesta a `version`: la tarjeta necesita el firmware v8.2')
     }
   }, 4000)
+  syncCfgPending = true   // v10.4: el status de la conexión puebla los campos
+  clearTimeout(syncCfgTimeout)
+  syncCfgTimeout = setTimeout(()=>{ syncCfgPending = false }, 6000)
   send(cmd.status()); send(cmd.modo('real')); send(cmd.log(true))
   send(cmd.configurado())   // v9.2: ¿la tarjeta ya tiene configuración aplicada?
   send('operacion')         // v9.4: sincronizar el estado de toma de datos
@@ -1659,6 +1662,17 @@ function dbAdd(serial, seq, rec){
   d.apps[seq] = rec
   saveDb()
   return true
+}
+// v10.4: al conectar (o al terminar la operación con el botón físico), la app
+// ADOPTA los datos guardados en el equipo: el siguiente `status` que llegue
+// con esta bandera activa puebla los campos de Dosificar y Configuración.
+let syncCfgPending = false
+let syncCfgTimeout = null
+function pedirDatosDelEquipo(){
+  syncCfgPending = true
+  clearTimeout(syncCfgTimeout)
+  syncCfgTimeout = setTimeout(()=>{ syncCfgPending = false }, 5000)
+  send(cmd.status())
 }
 // v9.2: estado de la bandera de configuración de la tarjeta (null = desconocido)
 let boardConfigured = null
@@ -1782,7 +1796,37 @@ function onLine(line){
   else if(/SD: respaldo desactivado/.test(line)){ $('sdSw').classList.remove('on') }
   // v9.4: estado de operación reportado por el equipo (app y tarjeta en sincronía)
   if(/OPERACION: ACTIVA/.test(line)){ setOperacionApp(true, true) }
-  else if(/OPERACION: DETENIDA/.test(line)){ setOperacionApp(false, true) }
+  else if(/OPERACION: DETENIDA/.test(line)){
+    setOperacionApp(false, true)
+    pedirDatosDelEquipo()   // v10.4: al cerrar la operación, refrescar lo guardado
+  }
+  // v10.4: adopción de los datos guardados en el equipo (status con bandera)
+  if(syncCfgPending){
+    let mCfg
+    if((mCfg = /Dosif: dosis (\d+)g, retardo (\d+)ms, tini (\d+)ms, tfin (\d+)ms, turbReal (\d+)%, dutyFijo (\d+)%/.exec(line))){
+      const gMaq = Number(mCfg[1])
+      dose.retardo = Number(mCfg[2]); dose.tini = Number(mCfg[3]); dose.tfin = Number(mCfg[4])
+      dose.turb = Number(mCfg[5]); dose.dutyFijo = Number(mCfg[6])
+      // dosis final estimada desde la dosis de máquina del equipo
+      const cav = Math.round(gMaq/2)
+      dose.dosis = Math.max(0, Math.round(cav * gcavG() * (1 - perdidaPct()/100)))
+      syncPerdida()
+      saveDose(); renderRetardoOptions(); render()
+      pushAlert('Datos del equipo cargados: retardo '+dose.retardo+' ms · turbina '+dose.turb+'% · dosis de máquina '+gMaq+' g · PWM fijo '+dose.dutyFijo+'%','info')
+    }
+    if((mCfg = /\| atasco (\d+) ms \| rearme (\d+) ms/.exec(line))){
+      $('atascoMs').value = mCfg[1]
+      $('rearmeMs').value = mCfg[2]
+      appRearmeMs = Number(mCfg[2])
+    }
+    if((mCfg = /Pulsador: operacion (\d+) ms \| bluetooth (\d+) ms \| antirebote (\d+) ms/.exec(line))){
+      $('holdOpMs').value = mCfg[1]
+      $('holdBtMs').value = mCfg[2]
+      $('reboteMs').value = mCfg[3]
+      syncCfgPending = false   // última línea del bloque: sincronización completa
+      clearTimeout(syncCfgTimeout)
+    }
+  }
   // v10.2: bloqueo del firmware por operación inactiva
   if(/DOSIFICAR BLOQUEADO: sin OPERACION activa/.test(line)){
     if(expectingStart){ expectingStart = false; clearTimeout(startTimeout) }
