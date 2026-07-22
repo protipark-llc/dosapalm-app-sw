@@ -294,7 +294,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-22 00:22 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-22 00:38 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -410,6 +410,9 @@
             <div class="row" style="font-size:10.5px;color:#6b7280"><span>Limpieza inicial</span><span>Aplicación</span><span>Limpieza final</span></div>
             <div class="muted" style="font-size:10px;margin-top:6px;line-height:1.5"><b>1)</b> Solo turbina (T. inicial): limpia el ducto de residuos. <b>2)</b> Turbina + dosificador + tolva: aplica hasta completar los gramos (dura lo que marque el conteo hall). <b>3)</b> Solo turbina (T. final): expulsa el material residual.</div>
           </div>
+          <!-- v10.1: guardar la configuración de esta ventana EN el equipo -->
+          <button class="btn ghost block" id="btnCfgDev" style="margin-top:4px">&#128190; Configurar dispositivo — guardar estos datos en el equipo</button>
+          <div class="note">Envía y <b>graba en la memoria del equipo</b> la dosis, velocidad, tiempos y retardo de esta ventana: son los que usará cualquier ciclo del operario (incluido el botón físico), aun después de apagarlo.</div>
           <!-- acciones principales: dos cards grandes del mismo tamaño -->
           <div class="actgrid">
             <button class="actcard session" id="btnSession" title="Inicia una operación para acumular las aplicaciones"><span class="aic">&#9654;</span>Iniciar operación<span class="asub">guarda las aplicaciones en Data</span></button>
@@ -920,6 +923,8 @@ var DosapalmProtocol = (() => {
     /** v9.2: bandera de tarjeta configurada — consultar / marcar tras enviar todo. */
     configurado: () => "configurado",
     configuradoOk: () => "configurado ok",
+    /** v10.1: persiste la config de dosificación en el equipo (botón físico). */
+    guardar: () => "guardar",
     /** v9.4: estado de OPERACIÓN (toma de datos, LED rojo titilando 300 ms). */
     operacion: (on) => `operacion ${on ? "on" : "off"}`,
     /** v9.4: duración de la pulsación sostenida del botón físico (mín. 1 s). */
@@ -1759,6 +1764,10 @@ function onLine(line){
       marcarFinCiclo()
     }
     if(nuevo) render()
+  }
+  // v10.1: confirmación de la configuración de dosificación persistida
+  if(/CONFIG GUARDADA/.test(line)){
+    pushAlert('✓ Datos de dosificación guardados en el equipo: valen para todos los ciclos del operario (botón físico incluido), aun tras reiniciar.','info')
   }
   // v9.6: estado del respaldo microSD reportado por el equipo
   if(/SD: respaldo activado|SD: microSD montada/.test(line)){ $('sdSw').classList.add('on') }
@@ -2655,6 +2664,18 @@ function liveApply(){
   for(const c of arguments) send(c)
 }
 $('btnDosificar').onclick = ejecutar
+// v10.1: guardar la configuración de Dosificar EN el equipo (persistente):
+// vale para todos los ciclos del operario, botón físico incluido.
+$('btnCfgDev').onclick = ()=>{
+  if(transport==='none'){ log('!! Conecta el equipo primero (Wi-Fi o Bluetooth)'); return }
+  send(cmd.modo('real'))
+  send(cmd.dosis(dosisComando()))
+  send(cmd.motor('turb', dose.turb))
+  send(cmd.tini(dose.tini)); send(cmd.tfin(dose.tfin))
+  send(cmd.retardo(dose.retardo))
+  send(cmd.dutyFijo(dose.dutyFijo||0))
+  send(cmd.guardar())
+}
 // SAFE de emergencia: detiene la dosificación y apaga TODAS las salidas.
 $('btnSafe').onclick = ()=>{
   if(transport==='none'){ log('!! Conecta el equipo primero (Wi-Fi o Bluetooth)'); return }
