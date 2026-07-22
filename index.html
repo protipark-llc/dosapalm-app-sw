@@ -294,7 +294,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-22 00:51 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-22 00:57 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -2502,8 +2502,19 @@ $('btnPwOperSave').onclick = ()=>{
   pushAlert('Contraseña del Operador restablecida','info')
   log('== Contraseña del Operador restablecida por el Administrador ==')
 }
-$('btnLogout').onclick = ()=>{ go('login'); $('loginPw').value='' }
-$('sLogout').onclick = ()=>{ go('login'); $('loginPw').value='' }
+// v10.5: cerrar sesión también DESCONECTA el equipo (Bluetooth o Wi-Fi).
+function cerrarSesionApp(){
+  try{
+    if(transport==='ble' && bleDev && bleDev.gatt && bleDev.gatt.connected){ bleDev.gatt.disconnect() }
+    if(ws){ try{ ws.close() }catch(e){} ws = null }
+  }catch(e){}
+  transport = 'none'; bleRx = null
+  setConn(false, 'Desconectado')
+  log('== Sesión cerrada: equipo desconectado ==')
+  go('login'); $('loginPw').value=''
+}
+$('btnLogout').onclick = cerrarSesionApp
+$('sLogout').onclick = cerrarSesionApp
 
 $('devRow').onclick = ()=> go('home')
 document.querySelectorAll('[data-go]').forEach(el=> el.addEventListener('click', ()=> go(el.dataset.go)))
