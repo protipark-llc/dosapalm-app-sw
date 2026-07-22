@@ -294,7 +294,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-22 00:38 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-22 00:42 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -1775,6 +1775,12 @@ function onLine(line){
   // v9.4: estado de operación reportado por el equipo (app y tarjeta en sincronía)
   if(/OPERACION: ACTIVA/.test(line)){ setOperacionApp(true, true) }
   else if(/OPERACION: DETENIDA/.test(line)){ setOperacionApp(false, true) }
+  // v10.2: bloqueo del firmware por operación inactiva
+  if(/DOSIFICAR BLOQUEADO: sin OPERACION activa/.test(line)){
+    if(expectingStart){ expectingStart = false; clearTimeout(startTimeout) }
+    pushAlert('El equipo rechazó el ciclo: la OPERACIÓN no está activa. Iníciala desde la app o sosteniendo el pulsador.','warn')
+    render()
+  }
   // v9.3: bloqueo del firmware por tarjeta sin configurar
   if(/DOSIFICAR BLOQUEADO: tarjeta SIN CONFIGURAR/.test(line)){
     if(expectingStart){ expectingStart = false; clearTimeout(startTimeout) }
@@ -1928,6 +1934,11 @@ function ejecutar(){
   // v9.3: tarjeta nueva sin configurar → primero calibrar/enviar configuración
   if(boardConfigured===false){
     pushAlert('La tarjeta está SIN CONFIGURAR: ve a Configuración, calibra y toca "Enviar configuración a la tarjeta" antes de dosificar.','alta')
+    return
+  }
+  // v10.2: sin OPERACIÓN activa no hay ciclos (regla del equipo)
+  if(!session.active){
+    pushAlert('Para dosificar debe estar ACTIVA la operación: tócala en "Iniciar operación" (o sostén el pulsador físico el tiempo configurado).','warn')
     return
   }
   send(cmd.modo('real'))
@@ -2694,6 +2705,9 @@ function renderExecBtn(){
   if(boardConfigured===false){
     b.disabled = true
     b.innerHTML = '<span class="aic">&#9881;</span>Configurar primero<span class="asub">tarjeta nueva: envía la configuración en Configuración</span>'
+  } else if(!session.active){
+    b.disabled = true
+    b.innerHTML = '<span class="aic">&#9654;</span>Inicia la operación<span class="asub">sin operación activa el equipo no dosifica</span>'
   } else if(expectingStart){
     b.disabled = true
     b.innerHTML = '<span class="aic">&#8987;</span>Iniciando…<span class="asub">esperando confirmación del equipo</span>'
