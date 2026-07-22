@@ -183,7 +183,10 @@
   .sysbox .v{font-weight:800;font-size:16px;margin-top:3px}
   /* calibración: gráfica de intervalos hall reales */
   .calchart{position:relative;height:96px;display:flex;align-items:flex-end;gap:3px;background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:8px 8px 6px;margin-top:10px;overflow:hidden}
-  .calbar{flex:1;min-width:5px;max-width:26px;border-radius:3px 3px 0 0;background:#c2c8d2;transition:height .15s}
+  .calbar{flex:1;min-width:5px;max-width:26px;border-radius:3px 3px 0 0;background:#c2c8d2;transition:height .15s;position:relative;overflow:visible}
+  /* contador de aplicaciones encima de cada barra (diagrama por hora) */
+  .calnum{position:absolute;top:-16px;left:50%;transform:translateX(-50%);font-size:9.5px;font-weight:800;color:var(--ink)}
+  #stChart{padding-top:18px}
   .calbar.ok{background:var(--green)}
   .calbar.warn{background:#e2a230}
   .calbar.bad{background:var(--red)}
@@ -291,7 +294,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-22 00:07 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-22 00:17 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -1717,6 +1720,17 @@ function onLine(line){
   let mRe
   if((mRe = /Rearme anti-repeticion = (\d+) ms/.exec(line))) appRearmeMs = Number(mRe[1])
   else if((mRe = /\| rearme (\d+) ms/.exec(line))) appRearmeMs = Number(mRe[1])
+  // v9.8: respuesta del sondeo de status — el equipo dice "estado: 0" (reposo)
+  // con el overlay abierto = el ciclo terminó y el cierre se perdió.
+  const mEstado = /\| estado: (\d)/.exec(line)
+  if(mEstado && overlay.open && Number(mEstado[1])===0 && overlay.cycleStart && Date.now()-overlay.cycleStart > 4000){
+    log('!! El equipo reporta reposo (status): el ciclo ya terminó — cierro el progreso')
+    const hechas = Math.max(0, state.hall - overlay.hallStart)
+    if(session.active && hechas>0) onDoseEvent(synthDoseEvent(hechas*2, 'ok'))
+    else closeOverlay()
+    marcarFinCiclo()
+    render()
+  }
   // v9.6: sincronización de las aplicaciones PERSISTIDAS en el equipo → base global
   let mEvt
   if((mEvt = /^EVT COUNT (\d+)/.exec(line))){
@@ -2072,7 +2086,7 @@ function renderStats(){
   })
   const max = Math.max(...buckets, 1)
   chart.innerHTML = buckets.map((n,i)=>
-    `<div class="calbar${n>0?' ok':''}" style="height:${Math.max(4, Math.round(n/max*100))}%" title="Hora ${i+1} de la jornada: ${n} aplicaciones"></div>`
+    `<div class="calbar${n>0?' ok':''}" style="height:${Math.max(4, Math.round(n/max*100))}%" title="Hora ${i+1} de la jornada: ${n} aplicaciones">${n>0?`<span class="calnum">${n}</span>`:''}</div>`
   ).join('')
   $('stT0').textContent = fmt(t0)
   $('stT1').textContent = fmt(t0 + nB*HORA)
@@ -2246,6 +2260,14 @@ function renderOverlay(){
     else closeOverlay()
     marcarFinCiclo()
     render()
+  }
+  // v9.8: sondeo ACTIVO — cada 5 s se pide `status` al equipo. Es una capa
+  // determinística: aunque TODAS las líneas asíncronas se pierdan (típico en
+  // ciclos muy cortos, cuya ráfaga de cierre va pegada a la de arranque), la
+  // respuesta del status dice si el equipo ya está en reposo.
+  if(transport!=='none' && Date.now()-(overlay.lastPoll||0) > 5000){
+    overlay.lastPoll = Date.now()
+    send(cmd.status())
   }
   if(ds==='idle'){
     // el equipo ya reporta reposo: cerrar de inmediato tras una breve espera
