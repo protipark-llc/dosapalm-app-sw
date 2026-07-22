@@ -294,7 +294,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-22 01:14 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-22 22:58 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -568,6 +568,19 @@
             <div class="note">Sostener el pulsador físico ese tiempo alterna la <b>operación</b> (toma de datos, LED rojo titilando cada 300 ms) o el <b>Bluetooth/config</b>. La de Bluetooth debe ser menor que la de operación. El <b>antirebote</b> es la presión mínima que cuenta como pulsación real (bájalo si el botón responde lento; súbelo si hay ruido). Todo queda guardado en la tarjeta.</div>
             <div class="tog" style="margin-top:10px"><span>&#128190; Respaldo en microSD</span><div class="sw" id="sdSw"></div></div>
             <div class="note">Cada aplicación queda SIEMPRE guardada en la memoria interna del ESP32 (con o sin conexión). Con este respaldo activo, si el equipo tiene microSD también se copia a <code>/eventos.csv</code>. Queda guardado en la tarjeta.</div>
+          </div>
+
+          <!-- v10.8: distribución de la memoria del equipo -->
+          <div class="card">
+            <div class="row"><span style="font-weight:700;font-size:13px">&#129520; Memoria del equipo</span><button class="btn ghost" id="memRefresh" style="padding:5px 12px;font-size:11px">Actualizar</button></div>
+            <div id="memInfo" class="muted" style="font-size:12px;margin-top:6px;line-height:1.5">Conéctate al equipo para ver su memoria.</div>
+            <div style="margin-top:10px">
+              <div class="muted" style="font-size:10px;margin-bottom:3px">Partición de datos usada</div>
+              <div style="height:12px;background:#eef1f5;border-radius:99px;overflow:hidden"><div id="memBarFs" style="height:100%;width:0%;background:#3d6db5;border-radius:99px;transition:width .3s"></div></div>
+              <div class="muted" style="font-size:10px;margin:8px 0 3px">Datos de sesiones DOSAPALM (dentro de la partición)</div>
+              <div style="height:12px;background:#eef1f5;border-radius:99px;overflow:hidden"><div id="memBarEv" style="height:100%;width:0%;background:var(--orange);border-radius:99px;transition:width .3s"></div></div>
+            </div>
+            <div class="note">La partición (app / datos) se fija al flashear el firmware — cambiar los tamaños requiere reflashear con otra tabla de particiones. Las sesiones guardadas ocupan la barra naranja; al sincronizar, la app las publica y le ordena al equipo <b>purgarlas</b> para mantener su memoria libre.</div>
           </div>
 
           <div class="card">
@@ -1599,6 +1612,7 @@ function onOpen(kind){
   send(cmd.configurado())   // v9.2: ¿la tarjeta ya tiene configuración aplicada?
   send('operacion')         // v9.4: sincronizar el estado de toma de datos
   send(cmd.evtCount())      // v9.6: ¿hay aplicaciones guardadas por descargar?
+  send('memoria')           // v10.8: distribución de la memoria del equipo
 }
 function connect(){
   const host = $('host').value.trim()||'localhost', port = $('port').value.trim()||'8081'
@@ -1675,6 +1689,10 @@ function dbAdd(serial, seq, rec){
 let syncCfgPending = false
 let syncCfgTimeout = null
 let syncNewCount = 0, syncNewTimer = null   // v10.7: resumen de sincronización
+let syncMaxSeq = 0                          // v10.8: para el ack/purga del equipo
+// v10.8: sondeo del estado de operación cada 10 s — aunque el Bluetooth pierda
+// la línea del cambio, la app se entera (y notifica) en el siguiente sondeo.
+setInterval(()=>{ if(transport!=='none' && !overlay.open) send('operacion') }, 10000)
 function pedirDatosDelEquipo(){
   syncCfgPending = true
   clearTimeout(syncCfgTimeout)
@@ -1794,13 +1812,16 @@ function onLine(line){
       else closeOverlay()
       marcarFinCiclo()
     }
-    // v10.7: resumen flotante al terminar la ráfaga de sincronización
+    // v10.7/v10.8: resumen flotante al terminar la ráfaga + ACK para que el
+    // equipo PURGUE lo ya publicado y su memoria quede libre.
     if(nuevo){
       syncNewCount++
+      syncMaxSeq = Math.max(syncMaxSeq, Number(mEvt[1]))
       clearTimeout(syncNewTimer)
       syncNewTimer = setTimeout(()=>{
         if(syncNewCount>1) pushAlert('✓ '+syncNewCount+' aplicaciones publicadas en la base de datos de la app','info')
         syncNewCount = 0
+        if(syncMaxSeq>0){ send(cmd.evtAck(syncMaxSeq)); syncMaxSeq = 0 }
       }, 1500)
       render()
     }
@@ -1808,6 +1829,20 @@ function onLine(line){
   // v10.1: confirmación de la configuración de dosificación persistida
   if(/CONFIG GUARDADA/.test(line)){
     pushAlert('✓ Datos de dosificación guardados en el equipo: valen para todos los ciclos del operario (botón físico incluido), aun tras reiniciar.','info')
+  }
+  // v10.8: confirmación de purga — la memoria del equipo quedó libre
+  let mAck
+  if((mAck = /^EVT ACK (\d+) \(pendientes (\d+)\)/.exec(line))){
+    if(Number(mAck[1])>0) pushAlert('&#129529; Memoria del equipo liberada: '+mAck[1]+' aplicaciones purgadas (ya publicadas en la app). Pendientes: '+mAck[2],'info')
+    send('memoria')
+  }
+  // v10.8: distribución de memoria del equipo
+  let mMem
+  if((mMem = /MEMORIA: flash (\d+) KB \| datos_total (\d+) KB \| datos_usados (\d+) KB \((\d+)%\) \| sesiones (\d+) B \((\d+)% de datos\) \| eventos (\d+) \| ram_libre (\d+) KB/.exec(line))){
+    $('memInfo').innerHTML = 'Flash total: <b>'+(Number(mMem[1])/1024).toFixed(0)+' MB</b> · Partición de datos: <b>'+mMem[2]+' KB</b> (usada '+mMem[4]+'%) · '+
+      'Sesiones DOSAPALM: <b>'+mMem[5]+' B</b> ('+mMem[6]+'% de la partición, '+mMem[7]+' eventos) · RAM libre: '+mMem[8]+' KB'
+    $('memBarFs').style.width = Math.min(100, Number(mMem[4]))+'%'
+    $('memBarEv').style.width = Math.min(100, Math.max(Number(mMem[6]), Number(mMem[7])>0?2:0))+'%'
   }
   // v9.6: estado del respaldo microSD reportado por el equipo
   if(/SD: respaldo activado|SD: microSD montada/.test(line)){ $('sdSw').classList.add('on') }
@@ -3249,6 +3284,11 @@ $('sdSw').addEventListener('click', ()=>{
   const activar = !$('sdSw').classList.contains('on')
   send('sd '+(activar?'on':'off'))
 })
+// v10.8: refrescar la distribución de memoria del equipo
+$('memRefresh').onclick = ()=>{
+  if(transport==='none'){ $('memInfo').textContent='⚠ Conecta el equipo primero (botón de Bluetooth en Inicio).'; return }
+  send('memoria')
+}
 $('reboteApply').onclick = ()=>{
   if(transport==='none'){ calMsg('⚠ Conecta el equipo primero.'); return }
   const ms = Math.min(1000, Math.max(30, parseInt($('reboteMs').value||'150',10)||150))
