@@ -294,7 +294,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-22 00:42 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-22 00:46 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -553,7 +553,13 @@
               <span class="muted" style="font-size:11px">ms</span>
               <button class="btn ghost" id="holdBtApply">Aplicar</button>
             </div>
-            <div class="note">Sostener el pulsador físico ese tiempo alterna la <b>operación</b> (toma de datos, LED rojo titilando cada 300 ms) o el <b>Bluetooth/config</b>. La de Bluetooth debe ser menor que la de operación. Quedan guardadas en la tarjeta.</div>
+            <div style="display:flex;gap:7px;align-items:center;margin-top:8px">
+              <span style="font-size:12px;flex-shrink:0">Antirebote pulsador</span>
+              <input type="number" id="reboteMs" class="numin" value="150" min="30" max="1000" step="10" style="flex:1"/>
+              <span class="muted" style="font-size:11px">ms</span>
+              <button class="btn ghost" id="reboteApply">Aplicar</button>
+            </div>
+            <div class="note">Sostener el pulsador físico ese tiempo alterna la <b>operación</b> (toma de datos, LED rojo titilando cada 300 ms) o el <b>Bluetooth/config</b>. La de Bluetooth debe ser menor que la de operación. El <b>antirebote</b> es la presión mínima que cuenta como pulsación real (bájalo si el botón responde lento; súbelo si hay ruido). Todo queda guardado en la tarjeta.</div>
             <div class="tog" style="margin-top:10px"><span>&#128190; Respaldo en microSD</span><div class="sw" id="sdSw"></div></div>
             <div class="note">Cada aplicación queda SIEMPRE guardada en la memoria interna del ESP32 (con o sin conexión). Con este respaldo activo, si el equipo tiene microSD también se copia a <code>/eventos.csv</code>. Queda guardado en la tarjeta.</div>
           </div>
@@ -925,6 +931,8 @@ var DosapalmProtocol = (() => {
     configuradoOk: () => "configurado ok",
     /** v10.1: persiste la config de dosificación en el equipo (botón físico). */
     guardar: () => "guardar",
+    /** v10.3: presión mínima del pulsador — antirebote/antirruido (30–1000 ms). */
+    rebote: (ms) => `rebote ${Math.min(1e3, Math.max(30, Math.round(ms)))}`,
     /** v9.4: estado de OPERACIÓN (toma de datos, LED rojo titilando 300 ms). */
     operacion: (on) => `operacion ${on ? "on" : "off"}`,
     /** v9.4: duración de la pulsación sostenida del botón físico (mín. 1 s). */
@@ -3098,6 +3106,7 @@ $('btnSendCfg').onclick = ()=>{
   // v9.4: pulsaciones sostenidas del botón físico
   send(cmd.holdOp(Math.max(1000, parseInt($('holdOpMs').value||'5000',10))))
   send(cmd.holdBt(Math.max(1000, parseInt($('holdBtMs').value||'3000',10))))
+  send(cmd.rebote(parseInt($('reboteMs').value||'150',10)))
   send(cmd.configuradoOk())
   $('cfgMsg').textContent = 'Configuración enviada — esperando la confirmación de la tarjeta…'
   // si en 8 s no llega la confirmación (BLE caído, tarjeta sin responder), avisar
@@ -3132,6 +3141,13 @@ $('sdSw').addEventListener('click', ()=>{
   const activar = !$('sdSw').classList.contains('on')
   send('sd '+(activar?'on':'off'))
 })
+$('reboteApply').onclick = ()=>{
+  if(transport==='none'){ calMsg('⚠ Conecta el equipo primero.'); return }
+  const ms = Math.min(1000, Math.max(30, parseInt($('reboteMs').value||'150',10)||150))
+  $('reboteMs').value = ms
+  send(cmd.rebote(ms))
+  pushAlert('Antirebote del pulsador: '+ms+' ms','info')
+}
 $('holdBtApply').onclick = ()=>{
   if(transport==='none'){ calMsg('⚠ Conecta el equipo primero.'); return }
   const ms = Math.max(1000, parseInt($('holdBtMs').value||'3000',10))
