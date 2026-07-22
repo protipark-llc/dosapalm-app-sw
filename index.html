@@ -294,7 +294,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-22 23:16 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-22 23:23 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -1702,9 +1702,13 @@ let syncCfgTimeout = null
 let boardCfg = null   // v10.9: configuración reportada por la tarjeta (para el diff)
 let syncNewCount = 0, syncNewTimer = null   // v10.7: resumen de sincronización
 let syncMaxSeq = 0                          // v10.8: para el ack/purga del equipo
-// v10.8: sondeo del estado de operación cada 10 s — aunque el Bluetooth pierda
-// la línea del cambio, la app se entera (y notifica) en el siguiente sondeo.
-setInterval(()=>{ if(transport!=='none' && !overlay.open) send('operacion') }, 10000)
+let lastEvtNotifAt = 0, lastEvtPullAt = 0   // v11: antirrebote del aviso/descarga
+// v10.8/v11: sondeo cada 10 s del estado de operación Y de los datos
+// pendientes — la respuesta del `evt count` de la conexión puede perderse en
+// la ráfaga BLE inicial; el sondeo garantiza la notificación y la descarga.
+setInterval(()=>{
+  if(transport!=='none' && !overlay.open){ send('operacion'); send(cmd.evtCount()) }
+}, 10000)
 function pedirDatosDelEquipo(){
   syncCfgPending = true
   clearTimeout(syncCfgTimeout)
@@ -1802,17 +1806,26 @@ function onLine(line){
   // v9.6: sincronización de las aplicaciones PERSISTIDAS en el equipo → base global
   let mEvt
   if((mEvt = /^EVT COUNT (\d+)/.exec(line))){
-    if(Number(mEvt[1])>0){
-      // v10.7: notificación FLOTANTE — el equipo trae datos esperando publicarse
-      pushAlert('&#128229; El equipo tiene '+mEvt[1]+' aplicaciones guardadas esperando publicarse en la app — sincronizando…','info')
-      log('!! Sincronizando '+mEvt[1]+' aplicaciones guardadas en el equipo...')
+    const nPend = Number(mEvt[1])
+    // v11: el sondeo repite `evt count` cada 10 s — antirrebote para no
+    // re-descargar ni re-alertar en cada respuesta.
+    if(nPend>0 && Date.now()-lastEvtPullAt > 15000){
+      lastEvtPullAt = Date.now()
+      if(Date.now()-lastEvtNotifAt > 30000){
+        lastEvtNotifAt = Date.now()
+        // v10.7: notificación FLOTANTE — el equipo trae datos esperando publicarse
+        pushAlert('&#128229; El equipo tiene '+nPend+' aplicaciones guardadas esperando publicarse en la app — sincronizando…','info')
+      }
+      log('!! Sincronizando '+nPend+' aplicaciones guardadas en el equipo...')
       send('evt since 0')
     }
-  } else if((mEvt = /^EVT,(\d+),(\d+),([\d.]+),(\d+),([01]),([-\d.]+),([-\d.]+),(\d+),(\d+),(\d+),(\d+),(\w+)/.exec(line))){
+  } else if((mEvt = /^EVT,(\d+),(\d+),([\d.]+),(\d+),([01]),([-\d.]+),([-\d.]+),(\d+),(\d+),(\d+),(\d+),(\w+)(?:,([^\s,]+))?/.exec(line))){
     const nuevo = dbAdd(dbSerial(), Number(mEvt[1]), {
       seq:Number(mEvt[1]), ms:Number(mEvt[2]), grams:Number(mEvt[3]), pulses:Number(mEvt[4]),
       fix:mEvt[5]==='1', lat:Number(mEvt[6]), lon:Number(mEvt[7]), retardo:Number(mEvt[11]),
       result:mEvt[12], syncedAt:Date.now(),
+      // v11.0: hora UTC del GPS de la tarjeta (null si no había señal/campo)
+      tsUtc:(mEvt[13] && mEvt[13]!=='-') ? mEvt[13] : null,
     })
     // v9.7: el EVT es la confirmación AUTORITATIVA del equipo. Si la línea de
     // "completado" se perdió (overlay aún abierto), el EVT cierra el ciclo con
@@ -2263,6 +2276,14 @@ function dbTodos(){
   filas.sort((a,b)=> (b.syncedAt||0)-(a.syncedAt||0) || b.seq-a.seq)
   return filas
 }
+// v11.0: hora local de la aplicación desde la hora UTC del GPS de la tarjeta
+function horaEv(f){
+  if(f.tsUtc){
+    const d = new Date(f.tsUtc)
+    if(!isNaN(d)) return d.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})+' · '+d.toLocaleDateString('es-CO',{day:'2-digit',month:'2-digit'})
+  }
+  return '—'
+}
 function renderDbList(){
   const host = $('dbList')
   if(!host) return
@@ -2270,17 +2291,17 @@ function renderDbList(){
   $('dbCount').textContent = filas.length+' registro'+(filas.length===1?'':'s')
   if(filas.length===0){ host.innerHTML='<div class="muted" style="font-size:12px">Sin registros todavía.</div>'; return }
   host.innerHTML =
-    '<div class="row" style="font-size:10px;color:var(--muted2);text-transform:uppercase;margin-bottom:2px"><span style="flex:1.4">Equipo</span><span style="flex:.5">#</span><span style="flex:.8">Gramos</span><span style="flex:.9">Retardo</span><span style="flex:.9">GPS</span><span style="flex:.8">Resultado</span></div>'+
+    '<div class="row" style="font-size:10px;color:var(--muted2);text-transform:uppercase;margin-bottom:2px"><span style="flex:1.3">Equipo</span><span style="flex:.4">#</span><span style="flex:1.1">Hora</span><span style="flex:.7">Gramos</span><span style="flex:.8">Retardo</span><span style="flex:.5">GPS</span><span style="flex:.7">Resultado</span></div>'+
     filas.slice(0,60).map(f=>
-      `<div class="row" style="font-size:11.5px;padding:4px 0;border-top:1px solid var(--line)"><span style="flex:1.4">${f.serial}</span><span style="flex:.5">${f.seq}</span><span style="flex:.8;font-weight:700">${f.grams} g</span><span style="flex:.9">${f.retardo} ms</span><span style="flex:.9">${f.fix?'&#10003;':'—'}</span><span style="flex:.8;color:${f.result==='ok'?'#2f8a34':(f.result==='partial'?'#b9791a':'#c0392b')};font-weight:700">${f.result}</span></div>`
+      `<div class="row" style="font-size:11.5px;padding:4px 0;border-top:1px solid var(--line)"><span style="flex:1.3">${f.serial}</span><span style="flex:.4">${f.seq}</span><span style="flex:1.1">${horaEv(f)}</span><span style="flex:.7;font-weight:700">${f.grams} g</span><span style="flex:.8">${f.retardo} ms</span><span style="flex:.5">${f.fix?'&#10003;':'—'}</span><span style="flex:.7;color:${f.result==='ok'?'#2f8a34':(f.result==='partial'?'#b9791a':'#c0392b')};font-weight:700">${f.result}</span></div>`
     ).join('')+
     (filas.length>60 ? `<div class="muted" style="font-size:10.5px;margin-top:4px">…y ${filas.length-60} más (todos van en el CSV)</div>` : '')
 }
 $('btnExportDb').onclick = ()=>{
   const filas = dbTodos()
   if(filas.length===0){ pushAlert('La base de datos está vacía todavía','warn'); return }
-  const csv = 'equipo,seq,ms_equipo,gramos,pulsos,gps_fix,lat,lon,retardo_ms,resultado,sincronizado\n'+
-    filas.map(f=> [f.serial,f.seq,f.ms,f.grams,f.pulses,f.fix?1:0,f.lat,f.lon,f.retardo,f.result,new Date(f.syncedAt||0).toISOString()].join(',')).join('\n')
+  const csv = 'equipo,seq,fecha_hora_utc,ms_equipo,gramos,pulsos,gps_fix,lat,lon,retardo_ms,resultado,sincronizado\n'+
+    filas.map(f=> [f.serial,f.seq,f.tsUtc||'',f.ms,f.grams,f.pulses,f.fix?1:0,f.lat,f.lon,f.retardo,f.result,new Date(f.syncedAt||0).toISOString()].join(',')).join('\n')
   const a = document.createElement('a')
   a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}))
   a.download = 'dosapalm-base-de-datos.csv'
