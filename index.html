@@ -294,7 +294,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-22 00:59 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-22 01:14 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -475,6 +475,12 @@
             <div class="row"><span style="font-weight:700;font-size:13px">&#127760; Dashboard global — todos los equipos</span><span class="muted" style="font-size:10.5px">solo Admin</span></div>
             <div id="dashList" style="margin-top:6px"></div>
             <div class="note">Cada aplicación queda <b>guardada en el ESP32</b> (y en la microSD si está habilitada) aunque no haya conexión. Al reconectar, la app descarga lo pendiente y actualiza esta base global, segmentada por equipo y con el total sumado.</div>
+          </div>
+          <!-- v10.7: base de datos completa — todos los registros de todos los equipos -->
+          <div class="card" id="dbCard" style="display:none">
+            <div class="row"><span style="font-weight:700;font-size:13px">&#128451; Base de datos — todas las aplicaciones</span><span class="muted" style="font-size:10.5px" id="dbCount">0 registros</span></div>
+            <div id="dbList" style="margin-top:6px;max-height:280px;overflow-y:auto"></div>
+            <button class="btn ghost block" id="btnExportDb" style="margin-top:8px">&#11015; Exportar CSV (todos los equipos)</button>
           </div>
         </div>
         <div class="tabbar" data-tabs></div>
@@ -1668,6 +1674,7 @@ function dbAdd(serial, seq, rec){
 // con esta bandera activa puebla los campos de Dosificar y Configuración.
 let syncCfgPending = false
 let syncCfgTimeout = null
+let syncNewCount = 0, syncNewTimer = null   // v10.7: resumen de sincronización
 function pedirDatosDelEquipo(){
   syncCfgPending = true
   clearTimeout(syncCfgTimeout)
@@ -1766,6 +1773,8 @@ function onLine(line){
   let mEvt
   if((mEvt = /^EVT COUNT (\d+)/.exec(line))){
     if(Number(mEvt[1])>0){
+      // v10.7: notificación FLOTANTE — el equipo trae datos esperando publicarse
+      pushAlert('&#128229; El equipo tiene '+mEvt[1]+' aplicaciones guardadas esperando publicarse en la app — sincronizando…','info')
       log('!! Sincronizando '+mEvt[1]+' aplicaciones guardadas en el equipo...')
       send('evt since 0')
     }
@@ -1785,7 +1794,16 @@ function onLine(line){
       else closeOverlay()
       marcarFinCiclo()
     }
-    if(nuevo) render()
+    // v10.7: resumen flotante al terminar la ráfaga de sincronización
+    if(nuevo){
+      syncNewCount++
+      clearTimeout(syncNewTimer)
+      syncNewTimer = setTimeout(()=>{
+        if(syncNewCount>1) pushAlert('✓ '+syncNewCount+' aplicaciones publicadas en la base de datos de la app','info')
+        syncNewCount = 0
+      }, 1500)
+      render()
+    }
   }
   // v10.1: confirmación de la configuración de dosificación persistida
   if(/CONFIG GUARDADA/.test(line)){
@@ -2131,6 +2149,9 @@ function render(){
 
 // ---------- estadísticas: velas = intervalos iguales de la sesión ----------
 function renderStats(){
+  // el dashboard y la base de datos NO dependen de la sesión actual: siempre
+  // se pintan, aunque la sesión esté vacía (el chart sí tiene return temprano).
+  renderDash()
   const evs = session.events
   $('stApps').textContent = session.applications
   $('stGrams').textContent = session.grams
@@ -2166,13 +2187,13 @@ function renderStats(){
   ).join('')
   $('stT0').textContent = fmt(t0)
   $('stT1').textContent = fmt(t0 + nB*HORA)
-  renderDash()
 }
 // v9.6: dashboard global (solo Admin) — suma y segmentación por equipo de la
 // base de datos sincronizada desde los ESP32.
 function renderDash(){
   const host = $('dashList')
   if(!host) return
+  renderDbList()   // la base de datos SIEMPRE se pinta, haya o no dashboard
   const series = Object.keys(db).sort()
   if(series.length===0){ host.innerHTML='<div class="muted" style="font-size:12px">Aún no hay aplicaciones sincronizadas de ningún equipo.</div>'; return }
   let totA=0, totG=0
@@ -2185,6 +2206,36 @@ function renderDash(){
       return `<div class="row" style="font-size:12px;padding:5px 0;border-top:1px solid var(--line)"><span style="flex:1.4;font-weight:700">&#128225; ${s}</span><span style="flex:1">${apps.length}</span><span style="flex:1">${Math.round(g)} g</span></div>`
     }).join('')+
     `<div class="row" style="font-size:12.5px;padding:6px 0;border-top:2px solid var(--line);font-weight:800"><span style="flex:1.4">TOTAL</span><span style="flex:1">${totA}</span><span style="flex:1">${Math.round(totG)} g</span></div>`
+}
+// v10.7: listado completo de la base de datos (todos los equipos, recientes primero)
+function dbTodos(){
+  const filas = []
+  for(const s of Object.keys(db)) for(const rec of Object.values(db[s].apps||{})) filas.push({serial:s, ...rec})
+  filas.sort((a,b)=> (b.syncedAt||0)-(a.syncedAt||0) || b.seq-a.seq)
+  return filas
+}
+function renderDbList(){
+  const host = $('dbList')
+  if(!host) return
+  const filas = dbTodos()
+  $('dbCount').textContent = filas.length+' registro'+(filas.length===1?'':'s')
+  if(filas.length===0){ host.innerHTML='<div class="muted" style="font-size:12px">Sin registros todavía.</div>'; return }
+  host.innerHTML =
+    '<div class="row" style="font-size:10px;color:var(--muted2);text-transform:uppercase;margin-bottom:2px"><span style="flex:1.4">Equipo</span><span style="flex:.5">#</span><span style="flex:.8">Gramos</span><span style="flex:.9">Retardo</span><span style="flex:.9">GPS</span><span style="flex:.8">Resultado</span></div>'+
+    filas.slice(0,60).map(f=>
+      `<div class="row" style="font-size:11.5px;padding:4px 0;border-top:1px solid var(--line)"><span style="flex:1.4">${f.serial}</span><span style="flex:.5">${f.seq}</span><span style="flex:.8;font-weight:700">${f.grams} g</span><span style="flex:.9">${f.retardo} ms</span><span style="flex:.9">${f.fix?'&#10003;':'—'}</span><span style="flex:.8;color:${f.result==='ok'?'#2f8a34':(f.result==='partial'?'#b9791a':'#c0392b')};font-weight:700">${f.result}</span></div>`
+    ).join('')+
+    (filas.length>60 ? `<div class="muted" style="font-size:10.5px;margin-top:4px">…y ${filas.length-60} más (todos van en el CSV)</div>` : '')
+}
+$('btnExportDb').onclick = ()=>{
+  const filas = dbTodos()
+  if(filas.length===0){ pushAlert('La base de datos está vacía todavía','warn'); return }
+  const csv = 'equipo,seq,ms_equipo,gramos,pulsos,gps_fix,lat,lon,retardo_ms,resultado,sincronizado\n'+
+    filas.map(f=> [f.serial,f.seq,f.ms,f.grams,f.pulses,f.fix?1:0,f.lat,f.lon,f.retardo,f.result,new Date(f.syncedAt||0).toISOString()].join(',')).join('\n')
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}))
+  a.download = 'dosapalm-base-de-datos.csv'
+  a.click()
 }
 function renderPruebas(){
   // chip y segmento de modo
@@ -2464,8 +2515,9 @@ function applyProfileUi(){
   $('opSummary').style.display = 'none'
   // Vincular QR: solo Administrador (el acceso desde Dispositivos también)
   $('btnGoVincular').style.display = admin ? '' : 'none'
-  // dashboard global de equipos: solo Administrador
+  // dashboard global y base de datos de equipos: solo Administrador
   $('dashGlobal').style.display = admin ? '' : 'none'
+  $('dbCard').style.display = admin ? '' : 'none'
   $('pwOperCard').style.display = admin ? '' : 'none'
   $('pfName').textContent = admin ? 'Administrador' : 'Operador'
   $('pfIcon').innerHTML = admin ? '&#9881;' : '&#128100;'
