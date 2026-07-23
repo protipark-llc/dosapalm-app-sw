@@ -294,7 +294,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-22 23:23 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-23 00:10 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -462,8 +462,8 @@
             <div class="sysbox"><div class="k">Prom / dosis</div><div class="v" style="font-size:22px"><span id="stAvg">0</span><span class="muted" style="font-size:11px"> g</span></div></div>
           </div>
           <div class="card">
-            <div class="row" style="margin-bottom:4px"><span style="font-weight:700;font-size:13px">Aplicaciones por hora</span><span class="muted" style="font-size:10.5px">cada barra = 1 hora de la jornada</span></div>
-            <div class="calchart" id="stChart" style="height:110px"><div class="calempty">Sin aplicaciones en la sesión.</div></div>
+            <div class="row" style="margin-bottom:4px"><span style="font-weight:700;font-size:13px">Aplicaciones por hora</span><span class="muted" style="font-size:10.5px">todas las de HOY, según la base de datos</span></div>
+            <div class="calchart" id="stChart" style="height:110px"><div class="calempty">Sin aplicaciones hoy (según la base de datos).</div></div>
             <div class="row" style="font-size:9.5px;color:#9aa1ad;margin-top:4px"><span id="stT0">—</span><span id="stT1">—</span></div>
           </div>
           <div class="card">
@@ -585,13 +585,15 @@
 
           <!-- v10.9: diff tarjeta vs app, con aprobación -->
           <div class="card">
-            <div class="row"><span style="font-weight:700;font-size:13px">&#128269; Tarjeta vs App (diff)</span><span class="chip" id="diffChip"><span class="d"></span><span id="diffChipTxt">—</span></span></div>
+            <div class="row"><span style="font-weight:700;font-size:13px">&#128269; Tarjeta vs App (diff)</span><span style="display:flex;gap:6px;align-items:center"><button class="btn ghost" id="btnDiffRefresh" style="padding:4px 10px;font-size:11px">Comparar ahora</button><span class="chip" id="diffChip"><span class="d"></span>—</span></span></div>
             <div id="diffList" class="muted" style="font-size:12px;margin-top:6px">Conéctate al equipo para comparar su configuración con la de la app.</div>
             <div style="display:flex;gap:8px;margin-top:10px">
               <button class="btn ghost" id="btnDiffAdopt" style="flex:1">&#11015; Adoptar los de la tarjeta</button>
               <button class="btn primary" id="btnDiffPush" style="flex:1">&#11014; Enviar los de la app</button>
             </div>
-            <div class="note">Al conectar una tarjeta, aquí aparece su configuración comparada con la de la app (las diferencias resaltadas). Aprueba en la dirección que quieras: <b>adoptar</b> lo que trae la tarjeta, o <b>enviar</b> (y guardar) lo que tiene la app.</div>
+            <div class="note">Al conectar una tarjeta, aquí aparece su configuración comparada con la de la app (las diferencias resaltadas). Aprueba en la dirección que quieras: <b>adoptar</b> lo que trae la tarjeta, o <b>enviar</b> (y guardar) lo que tiene la app. "Comparar ahora" funciona en cualquier momento, también con la operación activa.</div>
+            <button class="btn ghost" id="btnFabrica" style="width:100%;margin-top:8px;color:var(--red);border-color:var(--red)">&#128465; Borrar TODA la configuración de la tarjeta</button>
+            <div class="note">Deja la tarjeta como de fábrica (sin configurar) y la reinicia. <b>No</b> borra el serial, la secuencia ni las aplicaciones guardadas pendientes de descargar.</div>
           </div>
 
           <div class="card">
@@ -871,6 +873,16 @@
 
       <!-- logs en vivo: SOLO en la vista Pruebas y con el interruptor habilitado -->
       <div class="body" id="termWrap" style="flex:0 0 auto;padding-top:0"><div class="term" id="term"></div></div>
+
+      <!-- v11.1: aviso FLOTANTE de datos pendientes — la descarga pide confirmación -->
+      <div id="pendBanner" style="display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:999;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.18);padding:14px 16px;max-width:360px;width:calc(100vw - 32px)">
+        <div style="font-weight:800;font-size:13px">&#128229; El equipo tiene datos guardados</div>
+        <div id="pendBannerTxt" class="muted" style="font-size:12px;margin:6px 0 10px"></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn ghost" id="pendLater" style="flex:1">Más tarde</button>
+          <button class="btn primary" id="pendGo" style="flex:1">Descargar ahora</button>
+        </div>
+      </div>
     </div></div>
   </div>
 </div>
@@ -959,6 +971,8 @@ var DosapalmProtocol = (() => {
     /** v9.2: bandera de tarjeta configurada — consultar / marcar tras enviar todo. */
     configurado: () => "configurado",
     configuradoOk: () => "configurado ok",
+    /** v11.1: borrado total de la configuración de la tarjeta (reinicia). */
+    fabrica: () => "fabrica confirmar",
     /** v10.1: persiste la config de dosificación en el equipo (botón físico). */
     guardar: () => "guardar",
     /** v10.3: presión mínima del pulsador — antirebote/antirruido (30–1000 ms). */
@@ -1457,6 +1471,9 @@ var DosapalmProtocol = (() => {
 "use strict";
 (function(){
 const { cmd, LineAssembler, parseLine, reduce, initialState, DoseTracker, realDose, encodeSeq, stripTimestamp, DOSF_PCT_MIN } = window.DosapalmProtocol
+// v11.1: aplicar la vista (web/móvil) ANTES de cualquier render — sin esto,
+// al recargar con F5 la pantalla arranca un instante en vista móvil.
+try{ if((localStorage.getItem('dp_view')||'web')==='web' && window.innerWidth>=1024) document.body.classList.add('webmode') }catch(e){}
 
 // Calibración del retardo: timestamps [ms del equipo] de los últimos pulsos hall.
 // El intervalo entre pulsos consecutivos es la cadencia real de las cavidades.
@@ -1601,6 +1618,7 @@ let verTimer = null
 function onOpen(kind){
   transport = kind
   connChan = (kind==='ble') ? 'ble' : 'wifi'   // la radio activa es por la que entramos
+  try{ localStorage.setItem('dp_lasttr', kind) }catch(e){}   // v11.1: para reconectar tras F5
   renderConnSw()
   setConn(true, kind==='ble' ? 'Bluetooth' : 'Conectado', kind)
   log('== Conectado ('+kind+') ==')
@@ -1635,18 +1653,45 @@ function connect(){
   ws.onerror = ()=>{ log('!! Error Wi-Fi. ¿Unido a la red del equipo / simulador levantado?') }
   ws.onmessage = (ev)=>{ for(const line of asm.push(String(ev.data))) onLine(line) }
 }
-function connectBle(){
-  if(!navigator.bluetooth){ log('!! Web Bluetooth no disponible aquí. En iPhone usa el navegador Bluefy; en Android, Chrome.'); return }
-  log('== Buscando por Bluetooth (BLE)... El equipo debe estar en `conn ble`')
-  navigator.bluetooth.requestDevice({filters:[{namePrefix:'DOSAPALM'},{namePrefix:'DPLM'}],optionalServices:[NUS]})
-  .then(dev=>{ bleDev=dev; dev.addEventListener('gattserverdisconnected',()=>{ if(transport==='ble'){ transport='none'; bleRx=null; setConn(false,'Desconectado') } log('== Bluetooth desconectado ==') }); return dev.gatt.connect() })
+// v11.1: enganche BLE reutilizable — lo usan el botón (con selector) y la
+// RECONEXIÓN automática tras recargar la página (sin selector).
+function bleAttach(dev){
+  bleDev = dev
+  dev.addEventListener('gattserverdisconnected',()=>{ if(transport==='ble'){ transport='none'; bleRx=null; setConn(false,'Desconectado') } log('== Bluetooth desconectado ==') })
+  return dev.gatt.connect()
   .then(sv=> sv.getPrimaryService(NUS))
   .then(svc=> Promise.all([svc.getCharacteristic(NUS_RX), svc.getCharacteristic(NUS_TX)]))
   .then(cs=>{ bleRx=cs[0]; const tx=cs[1]
     tx.addEventListener('characteristicvaluechanged',(e)=>{ for(const line of asm.push(new TextDecoder().decode(e.target.value))) onLine(line) })
     return tx.startNotifications() })
   .then(()=>{ if(bleDev.name) setSerial(bleDev.name); onOpen('ble') })
+}
+function connectBle(){
+  if(!navigator.bluetooth){ log('!! Web Bluetooth no disponible aquí. En iPhone usa el navegador Bluefy; en Android, Chrome.'); return }
+  log('== Buscando por Bluetooth (BLE)... El equipo debe estar en `conn ble`')
+  navigator.bluetooth.requestDevice({filters:[{namePrefix:'DOSAPALM'},{namePrefix:'DPLM'}],optionalServices:[NUS]})
+  .then(dev=> bleAttach(dev))
   .catch(e=> log('!! Bluetooth: '+e.message))
+}
+// v11.1: al recargar la página el navegador SIEMPRE suelta el enlace BLE (es
+// una limitación de Web Bluetooth, no de la app). Lo que sí se puede es
+// RECONECTAR solo, sin volver a abrir el selector, usando el permiso ya
+// concedido — donde el navegador lo soporte (Chrome/Edge; Bluefy no siempre).
+function bleReconectar(){
+  if(!navigator.bluetooth || !navigator.bluetooth.getDevices){
+    log('!! Este navegador no permite reconectar solo: toca el botón Bluetooth')
+    pushAlert('Toca el botón Bluetooth para volver a conectar el equipo','media')
+    return
+  }
+  log('== Reconectando por Bluetooth (permiso ya concedido)...')
+  navigator.bluetooth.getDevices().then(devs=>{
+    const dev = devs.find(d=> d.name && (d.name.indexOf('DOSAPALM')===0 || d.name.indexOf('DPLM')===0))
+    if(!dev){ log('!! No hay equipo con permiso guardado: toca el botón Bluetooth'); return }
+    return bleAttach(dev).then(()=> pushAlert('&#128246; Bluetooth reconectado automáticamente con '+dev.name,'info'))
+  }).catch(e=>{
+    log('!! Reconexión BLE: '+e.message+' — toca el botón Bluetooth')
+    pushAlert('No se pudo reconectar solo (¿equipo apagado o fuera de alcance?). Toca el botón Bluetooth.','media')
+  })
 }
 // Cola ÚNICA de escritura BLE. Web Bluetooth no tolera writeValue concurrentes
 // ("GATT operation already in progress"): al dosificar, la app envía 6 comandos
@@ -1703,6 +1748,30 @@ let boardCfg = null   // v10.9: configuración reportada por la tarjeta (para el
 let syncNewCount = 0, syncNewTimer = null   // v10.7: resumen de sincronización
 let syncMaxSeq = 0                          // v10.8: para el ack/purga del equipo
 let lastEvtNotifAt = 0, lastEvtPullAt = 0   // v11: antirrebote del aviso/descarga
+let expectedPend = 0, evtRecvCount = 0      // v11.1: confirmación de descarga completa
+// v11.1: la descarga pide CONFIRMACIÓN en un aviso flotante — nada baja solo.
+let pendSnoozeUntil = 0
+function mostrarPendBanner(n){
+  $('pendBannerTxt').textContent = n+' aplicaciones guardadas en el equipo esperan publicarse en la base de datos de la app. Al descargarlas y CONFIRMARSE que llegaron completas, se le ordenará al equipo liberar su memoria.'
+  $('pendBanner').style.display = ''
+  $('pendBanner').dataset.n = n
+}
+function ocultarPendBanner(){ $('pendBanner').style.display = 'none' }
+$('pendGo').onclick = ()=>{
+  const n = Number($('pendBanner').dataset.n||0)
+  ocultarPendBanner()
+  if(transport==='none'){ pushAlert('El equipo se desconectó: reconéctate para descargar','media'); return }
+  lastEvtPullAt = Date.now()
+  expectedPend = n
+  evtRecvCount = 0
+  log('!! Descarga CONFIRMADA por el usuario: sincronizando '+n+' aplicaciones...')
+  send('evt since 0')
+}
+$('pendLater').onclick = ()=>{
+  ocultarPendBanner()
+  pendSnoozeUntil = Date.now() + 5*60000
+  pushAlert('Descarga pospuesta: te lo recordaré en 5 minutos (los datos siguen seguros en el equipo)','info')
+}
 // v10.8/v11: sondeo cada 10 s del estado de operación Y de los datos
 // pendientes — la respuesta del `evt count` de la conexión puede perderse en
 // la ráfaga BLE inicial; el sondeo garantiza la notificación y la descarga.
@@ -1807,18 +1876,17 @@ function onLine(line){
   let mEvt
   if((mEvt = /^EVT COUNT (\d+)/.exec(line))){
     const nPend = Number(mEvt[1])
-    // v11: el sondeo repite `evt count` cada 10 s — antirrebote para no
-    // re-descargar ni re-alertar en cada respuesta.
-    if(nPend>0 && Date.now()-lastEvtPullAt > 15000){
-      lastEvtPullAt = Date.now()
+    // v11.1: la descarga YA NO es automática — el aviso flotante pide
+    // CONFIRMACIÓN y solo al aprobar se piden los datos (y la limpieza de la
+    // memoria solo tras confirmar la descarga completa con EVT END).
+    if(nPend>0 && Date.now()-lastEvtPullAt > 15000 && Date.now()>pendSnoozeUntil){
+      mostrarPendBanner(nPend)
       if(Date.now()-lastEvtNotifAt > 30000){
         lastEvtNotifAt = Date.now()
-        // v10.7: notificación FLOTANTE — el equipo trae datos esperando publicarse
-        pushAlert('&#128229; El equipo tiene '+nPend+' aplicaciones guardadas esperando publicarse en la app — sincronizando…','info')
+        pushAlert('&#128229; El equipo tiene '+nPend+' aplicaciones guardadas esperando publicarse — confirma la descarga en el aviso flotante','info')
       }
-      log('!! Sincronizando '+nPend+' aplicaciones guardadas en el equipo...')
-      send('evt since 0')
     }
+    if(nPend===0) ocultarPendBanner()
   } else if((mEvt = /^EVT,(\d+),(\d+),([\d.]+),(\d+),([01]),([-\d.]+),([-\d.]+),(\d+),(\d+),(\d+),(\d+),(\w+)(?:,([^\s,]+))?/.exec(line))){
     const nuevo = dbAdd(dbSerial(), Number(mEvt[1]), {
       seq:Number(mEvt[1]), ms:Number(mEvt[2]), grams:Number(mEvt[3]), pulses:Number(mEvt[4]),
@@ -1837,19 +1905,38 @@ function onLine(line){
       else closeOverlay()
       marcarFinCiclo()
     }
-    // v10.7/v10.8: resumen flotante al terminar la ráfaga + ACK para que el
-    // equipo PURGUE lo ya publicado y su memoria quede libre.
+    // v11.1: contar TODO lo recibido en la descarga (la confirmación es contra
+    // EVT END); el ACK/purga ya NO es a ciegas — solo tras descarga completa.
+    evtRecvCount++
+    syncMaxSeq = Math.max(syncMaxSeq, Number(mEvt[1]))
     if(nuevo){
       syncNewCount++
-      syncMaxSeq = Math.max(syncMaxSeq, Number(mEvt[1]))
       clearTimeout(syncNewTimer)
       syncNewTimer = setTimeout(()=>{
         if(syncNewCount>1) pushAlert('✓ '+syncNewCount+' aplicaciones publicadas en la base de datos de la app','info')
         syncNewCount = 0
-        if(syncMaxSeq>0){ send(cmd.evtAck(syncMaxSeq)); syncMaxSeq = 0 }
       }, 1500)
       render()
     }
+  }
+  // v11.1: fin de la descarga — CONFIRMAR antes de ordenar la limpieza
+  if((mEvt = /^EVT END (\d+)/.exec(line))){
+    const enviados = Number(mEvt[1])
+    if(enviados>0 && evtRecvCount >= enviados){
+      pushAlert('✓ Descarga confirmada: '+enviados+' aplicaciones recibidas completas — ordenando limpieza de la memoria del equipo','info')
+      if(syncMaxSeq>0){ send(cmd.evtAck(syncMaxSeq)); syncMaxSeq = 0 }
+    } else if(enviados>0){
+      pushAlert('⚠ Descarga INCOMPLETA: llegaron '+evtRecvCount+' de '+enviados+' aplicaciones — se reintentará (la memoria del equipo NO se toca)','warn')
+      lastEvtPullAt = 0   // el próximo sondeo (≤10 s) reintenta
+      syncMaxSeq = 0
+    }
+    evtRecvCount = 0; expectedPend = 0
+  }
+  // v11.1: la tarjeta confirmó el borrado total de su configuración
+  if(/FABRICA OK/.test(line)){
+    boardConfigured = false; cfgAlerted = false; boardCfg = null
+    pushAlert('&#128465; Configuración de la tarjeta borrada: quedó SIN CONFIGURAR y se está reiniciando. Envíale la configuración desde la app antes de operar.','alta')
+    renderCfgDiff(false); render()
   }
   // v10.1: confirmación de la configuración de dosificación persistida
   if(/CONFIG GUARDADA/.test(line)){
@@ -1873,7 +1960,8 @@ function onLine(line){
   if(/SD: respaldo activado|SD: microSD montada/.test(line)){ $('sdSw').classList.add('on') }
   else if(/SD: respaldo desactivado/.test(line)){ $('sdSw').classList.remove('on') }
   // v9.4: estado de operación reportado por el equipo (app y tarjeta en sincronía)
-  if(/OPERACION: ACTIVA/.test(line)){ setOperacionApp(true, true) }
+  if(/OPERACION: ACTIVA \(/.test(line)){ setOperacionApp(true, true); pedirDatosDelEquipo() }
+  else if(/OPERACION: ACTIVA$/.test(line.replace(/^\[\d+\] /,''))){ setOperacionApp(true, true) }
   else if(/OPERACION: DETENIDA/.test(line)){
     setOperacionApp(false, true)
     pedirDatosDelEquipo()   // v10.4: al cerrar la operación, refrescar lo guardado
@@ -2225,30 +2313,31 @@ function renderStats(){
     `<span class="chip g"><span class="d"></span>${counts.ok} ok</span>`+
     `<span class="chip a"><span class="d"></span>${counts.partial} parciales</span>`+
     `<span class="chip r"><span class="d"></span>${counts.error} con error</span>`
-  // velas: dividir [inicio de sesión, ahora] en N intervalos y contar aplicaciones
+  // v11.1: el diagrama por hora refleja TODAS las aplicaciones del DÍA ACTUAL
+  // según la BASE DE DATOS (todas las descargadas del equipo + las de esta
+  // sesión, que también entran a la base por su línea EVT). La hora de cada
+  // aplicación es la del GPS de la tarjeta; sin GPS, la de su sincronización.
   const chart = $('stChart')
-  if(evs.length===0 || !session.startedAt){
-    chart.innerHTML = '<div class="calempty">Sin aplicaciones en la sesión.</div>'
+  const hoy0 = new Date(); hoy0.setHours(0,0,0,0)
+  const horasHoy = []
+  dbTodos().forEach(f=>{
+    let d = f.tsUtc ? new Date(f.tsUtc) : (f.syncedAt ? new Date(f.syncedAt) : null)
+    if(d && !isNaN(d) && d >= hoy0) horasHoy.push(d.getHours())
+  })
+  if(horasHoy.length===0){
+    chart.innerHTML = '<div class="calempty">Sin aplicaciones hoy (según la base de datos).</div>'
     $('stT0').textContent='—'; $('stT1').textContent='—'
     return
   }
-  // barras FIJAS de 1 HORA: la jornada completa desde el inicio de la sesión,
-  // con la cantidad de aplicaciones de cada hora en vertical.
-  const HORA = 3600000
-  const t0 = session.startedAt
-  const nB = Math.min(24, Math.max(1, Math.ceil((Date.now()-t0)/HORA)))
-  const buckets = new Array(nB).fill(0)
-  evs.forEach(ev=>{
-    const ts = new Date(ev.ts_device).getTime()
-    const i = Math.min(nB-1, Math.max(0, Math.floor((ts-t0)/HORA)))
-    buckets[i]++
-  })
+  const h0 = Math.min(...horasHoy), h1 = Math.max(...horasHoy)
+  const buckets = new Array(h1-h0+1).fill(0)
+  horasHoy.forEach(h=> buckets[h-h0]++)
   const max = Math.max(...buckets, 1)
   chart.innerHTML = buckets.map((n,i)=>
-    `<div class="calbar${n>0?' ok':''}" style="height:${Math.max(4, Math.round(n/max*100))}%" title="Hora ${i+1} de la jornada: ${n} aplicaciones">${n>0?`<span class="calnum">${n}</span>`:''}</div>`
+    `<div class="calbar${n>0?' ok':''}" style="height:${Math.max(4, Math.round(n/max*100))}%" title="${String(h0+i).padStart(2,'0')}:00 - ${String(h0+i+1).padStart(2,'0')}:00: ${n} aplicaciones">${n>0?`<span class="calnum">${n}</span>`:''}</div>`
   ).join('')
-  $('stT0').textContent = fmt(t0)
-  $('stT1').textContent = fmt(t0 + nB*HORA)
+  $('stT0').textContent = String(h0).padStart(2,'0')+':00'
+  $('stT1').textContent = String(h1+1).padStart(2,'0')+':00'
 }
 // v9.6: dashboard global (solo Admin) — suma y segmentación por equipo de la
 // base de datos sincronizada desde los ESP32.
@@ -2598,7 +2687,14 @@ function entrarApp(perfil){
   profile = perfil
   try{ localStorage.setItem('dp_login', perfil) }catch(e){}
   buildTabs(); newTracker(); applyProfileUi()
-  if(transport==='none') connect()
+  // v11.1: retomar la ÚLTIMA vía de conexión — si era Bluetooth, intentar la
+  // reconexión automática (sin selector) en vez de abrir el WebSocket.
+  if(transport==='none'){
+    let lastTr = 'ws'
+    try{ lastTr = localStorage.getItem('dp_lasttr')||'ws' }catch(e){}
+    if(lastTr==='ble') bleReconectar()
+    else connect()
+  }
   go('home'); render()
 }
 function doLogin(){
@@ -3334,7 +3430,12 @@ $('sdSw').addEventListener('click', ()=>{
 function diffFilas(){
   if(!boardCfg) return []
   const b = boardCfg
+  // v11.1: la primera fila compara la DOSIS DE LA VISTA DOSIFICAR con la que
+  // la tarjeta usaría (su dosis de máquina traducida con la calibración y las
+  // pérdidas de la app) — visible en cualquier momento, operación incluida.
+  const dosisTarjeta = (b.gMaq!=null) ? Math.max(0, Math.round(Math.round(b.gMaq/2) * gcavG() * (1 - perdidaPct()/100))) : null
   return [
+    ['Dosis a aplicar (g) — vista Dosificar', dose.dosis, dosisTarjeta],
     ['Dosis de máquina (g)', dosisComando(), b.gMaq],
     ['Retardo (ms)', dose.retardo, b.retardo],
     ['T. inicial (ms)', dose.tini, b.tini],
@@ -3381,6 +3482,18 @@ $('btnDiffAdopt').onclick = ()=>{
   if(b.rebote!=null) $('reboteMs').value = b.rebote
   syncPerdida(); saveDose(); renderRetardoOptions(); render(); renderCfgDiff(false)
   pushAlert('✓ La app adoptó la configuración de la tarjeta','info')
+}
+// v11.1: comparar en cualquier momento — también con la operación ACTIVA,
+// para ver lo que la tarjeta está usando para dosificar vs lo de la app.
+$('btnDiffRefresh').onclick = ()=>{
+  if(transport==='none'){ pushAlert('Conéctate al equipo primero','media'); return }
+  pedirDatosDelEquipo()
+}
+// v11.1: borrado total de la configuración de la tarjeta (con confirmación).
+$('btnFabrica').onclick = ()=>{
+  if(transport==='none'){ pushAlert('Conéctate al equipo primero','media'); return }
+  if(!confirm('¿Borrar TODA la configuración de la tarjeta?\n\nQueda como de fábrica (sin configurar) y se reinicia. El serial, la secuencia y las aplicaciones guardadas pendientes NO se borran.')) return
+  send('fabrica confirmar')
 }
 $('btnDiffPush').onclick = ()=>{
   if(transport==='none'){ pushAlert('Conéctate al equipo primero','warn'); return }
