@@ -139,6 +139,17 @@
   .stagelabel{font-weight:800;font-size:16px;margin-top:4px}
   .warnbox{background:#fdecec;border:1px solid #f2c4c4;color:#c0392b;border-radius:10px;padding:9px 11px;font-size:12px;font-weight:600;margin-top:10px}
   .term{background:#0b1017;color:#cdd6e4;border-radius:12px;height:120px;overflow-y:auto;padding:8px 10px;font-family:ui-monospace,Consolas,monospace;font-size:10.5px;line-height:1.45}
+  /* v11.3: círculo de guardado en los botones Aplicar/Guardar */
+  @keyframes dpspin{to{transform:rotate(360deg)}}
+  .btn.saving{pointer-events:none;opacity:.75}
+  .btn.saving::after{content:'';display:inline-block;width:11px;height:11px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;margin-left:7px;vertical-align:-2px;animation:dpspin .7s linear infinite}
+  .btn.savedok{pointer-events:none;border-color:var(--green)!important;color:var(--green)!important}
+  /* v11.3: submenú de secciones (Config y Pruebas) y títulos de sección */
+  .subnav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;position:sticky;top:0;z-index:5;background:var(--soft);padding:6px 0}
+  .subnav span{border:1px solid var(--line);background:var(--card);border-radius:99px;padding:5px 11px;font-size:11px;font-weight:700;color:#48505e;cursor:pointer;white-space:nowrap}
+  .subnav span:hover{border-color:var(--orange);color:var(--orange)}
+  .sechead{font-size:10.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--muted2,#9aa1ad);margin:6px 2px 8px}
+  .card + .sechead{margin-top:14px}
   /* v11.2: controles de la consola */
   .tbtn{border:1px solid var(--line);background:var(--card);color:#48505e;border-radius:8px;padding:4px 9px;font-size:10.5px;font-weight:700;cursor:pointer}
   .tbtn:hover{background:#f0f3f7}
@@ -238,6 +249,7 @@
     body.webmode .scrn[data-scrn="stats"] .body,
     body.webmode .scrn[data-scrn="config"] .body,
     body.webmode .scrn[data-scrn="pruebas"] .body{display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:0 18px;align-content:start;align-items:start}
+    body.webmode .subnav,body.webmode .sechead{grid-column:1/-1}
     /* las vistas de flujo (dosificar, home...) quedan cómodas pero no angostas */
     body.webmode .scrn[data-scrn="home"] .body,
     body.webmode .scrn[data-scrn="dosificar"] .body,
@@ -314,7 +326,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-23 23:21 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-23 23:28 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -573,8 +585,22 @@
       <div class="scrn" data-scrn="config">
         <div class="apphead"><div class="brand"><svg class="logo" viewBox="0 0 48 48"><rect x="8" y="14" width="26" height="26" rx="4" fill="#fff"/><rect x="10" y="16" width="22" height="22" rx="3" fill="#E8721C"/></svg><div><div class="co">ENVASES S.A.S</div><div class="pt">DOSAPALM V1</div></div></div><div class="scr-title">Configuración · Admin</div></div>
         <div class="body">
+          <!-- v11.3: submenú de secciones -->
+          <div class="subnav">
+            <span data-jump="secTarjeta">&#128228; Tarjeta</span>
+            <span data-jump="secPulsador">&#128307; Pulsador</span>
+            <span data-jump="secMemoria">&#129520; Memoria</span>
+            <span data-jump="secDiff">&#128269; Diff</span>
+            <span data-jump="secCal">&#127899; Calibración</span>
+            <span data-jump="secPerd">&#128167; Pérdidas</span>
+            <span data-jump="secTurb">&#127788; Turbina</span>
+            <span data-jump="secPin">&#9881; Piñones</span>
+            <span data-jump="secVista">&#128421; Vista</span>
+          </div>
+
+          <div class="sechead">Equipo / tarjeta</div>
           <!-- v9.2: envío de la configuración completa a la tarjeta -->
-          <div class="card">
+          <div class="card" id="secTarjeta">
             <div class="row" style="margin-bottom:6px">
               <span style="font-weight:700;font-size:13px">Configuración de la tarjeta</span>
               <span class="chip" id="cfgChip"><span class="d"></span><span id="cfgChipTxt">—</span></span>
@@ -583,7 +609,12 @@
             <button class="btn primary block" id="btnSendCfg" style="margin-top:10px">&#128228; Enviar configuración a la tarjeta</button>
             <button class="btn ghost block" id="btnStartOp" style="margin-top:8px">&#9654; Iniciar toma de datos (operación)</button>
             <div class="hint" id="cfgMsg"></div>
-            <div style="display:flex;gap:7px;align-items:center;margin-top:10px">
+          </div>
+
+          <!-- v11.3: pulsador físico y respaldo, en su propia tarjeta -->
+          <div class="card" id="secPulsador">
+            <div style="font-weight:700;font-size:13px;margin-bottom:6px">Pulsador físico y respaldo</div>
+            <div style="display:flex;gap:7px;align-items:center;margin-top:4px">
               <span style="font-size:12px;flex-shrink:0">Pulsación operación</span>
               <input type="number" id="holdOpMs" class="numin" value="5000" min="1000" step="500" style="flex:1"/>
               <span class="muted" style="font-size:11px">ms</span>
@@ -607,7 +638,7 @@
           </div>
 
           <!-- v10.8: distribución de la memoria del equipo -->
-          <div class="card">
+          <div class="card" id="secMemoria">
             <div class="row"><span style="font-weight:700;font-size:13px">&#129520; Memoria del equipo</span><button class="btn ghost" id="memRefresh" style="padding:5px 12px;font-size:11px">Actualizar</button></div>
             <div id="memInfo" class="muted" style="font-size:12px;margin-top:6px;line-height:1.5">Conéctate al equipo para ver su memoria.</div>
             <div style="margin-top:10px">
@@ -620,7 +651,7 @@
           </div>
 
           <!-- v10.9: diff tarjeta vs app, con aprobación -->
-          <div class="card">
+          <div class="card" id="secDiff">
             <div class="row"><span style="font-weight:700;font-size:13px">&#128269; Tarjeta vs App (diff)</span><span style="display:flex;gap:6px;align-items:center"><button class="btn ghost" id="btnDiffRefresh" style="padding:4px 10px;font-size:11px">Comparar ahora</button><span class="chip" id="diffChip"><span class="d"></span>—</span></span></div>
             <div id="diffList" class="muted" style="font-size:12px;margin-top:6px">Conéctate al equipo para comparar su configuración con la de la app.</div>
             <div style="display:flex;gap:8px;margin-top:10px">
@@ -632,13 +663,8 @@
             <div class="note">Deja la tarjeta como de fábrica (sin configurar) y la reinicia. <b>No</b> borra el serial, la secuencia ni las aplicaciones guardadas pendientes de descargar.</div>
           </div>
 
-          <div class="card">
-            <div style="font-weight:700;font-size:13px;margin-bottom:9px">Vista de Dosificar</div>
-            <div class="seg" id="uiSeg"><div data-ui="pro">Pro</div><div data-ui="dummie">Sencilla</div></div>
-            <div class="note"><b>Pro</b>: todos los parámetros como hasta ahora. <b>Sencilla</b>: tarjetas grandes con lo esencial — dosis, velocidad baja (15 m/s) / alta (21 m/s), tiempos y retardo.</div>
-          </div>
-
-          <div class="card">
+          <div class="sechead">Calibración y catálogos</div>
+          <div class="card" id="secCal">
             <div style="font-weight:700;font-size:13px;margin-bottom:2px">Calibración del retardo</div>
             <div class="muted" style="font-size:11px;margin-bottom:10px">Cada barra es una <b>lectura real del hall</b>: el tiempo entre una cavidad y la siguiente, medido con el reloj del equipo. La línea azul es el objetivo; el lazo de control debe converger a ±15% (verde).</div>
             <div class="sysgrid" style="grid-template-columns:repeat(4,1fr)">
@@ -683,7 +709,7 @@
             <div class="note">La calibración mueve <b>únicamente el motor dosificador</b> — turbina y tolva apagadas. <b>Arranca siempre al 90% de duty</b> (fuerza de sobra para despegar) y el lazo converge bajando hacia el duty real del retardo durante el tiempo de medición elegido. <b>Usar</b> aplica ese retardo como configuración de trabajo de la máquina.</div>
           </div>
 
-          <div class="card">
+          <div class="card" id="secPerd">
             <div style="font-weight:700;font-size:13px;margin-bottom:4px">Pérdida de manguera por seteo</div>
             <div class="muted" style="font-size:11.5px">La pérdida en la manguera <b>depende de la turbina y del retardo</b>. Registra aquí la pérdida medida para cada combinación; Dosificar usará automáticamente la que corresponda al seteo activo.</div>
             <div id="perdList" style="margin-top:8px"></div>
@@ -696,7 +722,7 @@
             <div class="note">La turbina del seteo se elige entre las <b>velocidades guardadas (m/s)</b> en la tarjeta de abajo. Para medir la pérdida: dosifica con ese seteo, pesa lo que sale al final de la manguera y calcula <code>pérdida = 100 × (1 − pesado/dosificado)</code>.</div>
           </div>
 
-          <div class="card">
+          <div class="card" id="secTurb">
             <div style="font-weight:700;font-size:13px;margin-bottom:4px">Velocidad de turbina (m/s)</div>
             <div class="muted" style="font-size:11.5px">Registra la velocidad del aire medida (<b>5–30 m/s</b>) para cada potencia (duty) de la turbina y la <b>altura de palma</b> a la que aplica. La turbina llega al 100% — máx. recomendado <b>78%</b>. Dosificar muestra la velocidad del seteo activo.</div>
             <div id="tvList" style="margin-top:8px"></div>
@@ -709,7 +735,7 @@
             <div class="note">Mide con anemómetro a la salida del ducto con la turbina a ese % sostenido (usa el slider de Pruebas o el ▶ de calibración). El lápiz ✎ carga la fila en los campos para editarla.</div>
           </div>
 
-          <div class="card">
+          <div class="card" id="secPin">
             <div style="font-weight:700;font-size:13px;margin-bottom:4px">Piñones dosificadores</div>
             <div class="muted" style="font-size:11.5px">Registra cada piñón con su <b>cantidad de cavidades</b> y los <b>gramos por cavidad</b> que carga. En Dosificar solo se elige el piñón instalado.</div>
             <div id="pnList" style="margin-top:8px"></div>
@@ -721,6 +747,13 @@
             </div>
             <div class="note">Guardar con un nombre existente lo actualiza. El piñón activo se elige en Dosificar.</div>
           </div>
+
+          <div class="sechead">Apariencia</div>
+          <div class="card" id="secVista">
+            <div style="font-weight:700;font-size:13px;margin-bottom:9px">Vista de Dosificar</div>
+            <div class="seg" id="uiSeg"><div data-ui="pro">Pro</div><div data-ui="dummie">Sencilla</div></div>
+            <div class="note"><b>Pro</b>: todos los parámetros como hasta ahora. <b>Sencilla</b>: tarjetas grandes con lo esencial — dosis, velocidad baja (15 m/s) / alta (21 m/s), tiempos y retardo.</div>
+          </div>
         </div>
         <div class="tabbar" data-tabs></div>
       </div>
@@ -729,12 +762,25 @@
       <div class="scrn" data-scrn="pruebas">
         <div class="apphead"><div class="brand"><svg class="logo" viewBox="0 0 48 48"><rect x="8" y="14" width="26" height="26" rx="4" fill="#fff"/><rect x="10" y="16" width="22" height="22" rx="3" fill="#E8721C"/></svg><div><div class="co">ENVASES S.A.S</div><div class="pt">DOSAPALM V1</div></div></div><div class="scr-title">Pruebas · Admin</div></div>
         <div class="body">
-          <div class="card">
+          <!-- v11.3: submenú de secciones -->
+          <div class="subnav">
+            <span data-jump="prModo">&#127918; Modo</span>
+            <span data-jump="prConx">&#128246; Conexiones</span>
+            <span data-jump="prEstado">&#128161; Estado</span>
+            <span data-jump="prHall">&#129518; Hall</span>
+            <span data-jump="prMotores">&#9881; Motores</span>
+            <span data-jump="prLeds">&#128308; LEDs</span>
+            <span data-jump="prSeq">&#9654; Secuencias</span>
+            <span data-jump="prMon">&#128225; Monitor</span>
+          </div>
+
+          <div class="sechead">Estado del equipo</div>
+          <div class="card" id="prModo">
             <div class="row" style="margin-bottom:9px"><span style="font-weight:700;font-size:13px">Modo de operación</span><span class="chip" id="pModeChip"><span class="d"></span>—</span></div>
             <div class="seg" id="pSeg"><div data-m="prueba">Prueba</div><div data-m="real">Real</div></div>
           </div>
 
-          <div class="card">
+          <div class="card" id="prConx">
             <div style="font-weight:700;font-size:13px;margin-bottom:6px">Conexiones del equipo</div>
             <div class="perif">
               <div class="tog"><span>&#128266; Bluetooth</span><div class="sw" data-connsw="ble"></div></div>
@@ -744,7 +790,7 @@
             <div class="note">Bluetooth y Wi-Fi son <b>excluyentes</b> en la tarjeta: habilitar uno envía <code>conn ble|wifi</code> y deshabilita el otro (reconecta por el canal nuevo). El USB (cable serial) siempre queda disponible como respaldo y no se puede apagar.</div>
           </div>
 
-          <div class="card">
+          <div class="card" id="prEstado">
             <div style="font-weight:700;font-size:13px;margin-bottom:6px">Estado del sistema <span class="muted" style="font-weight:400;font-size:10.5px">en vivo desde el equipo</span></div>
             <div class="sysleds">
               <div class="sysled"><div class="g" id="syR"></div>Rojo</div>
@@ -766,7 +812,7 @@
             </div>
           </div>
 
-          <div class="card">
+          <div class="card" id="prHall">
             <div style="font-weight:700;font-size:13px;margin-bottom:6px">Contador hall en tiempo real</div>
             <div class="sysgrid">
               <div class="sysbox"><div class="k">Pulsos</div><div class="v" id="hcPulses" style="color:var(--orange);font-size:22px">0</div></div>
@@ -784,7 +830,8 @@
             <div class="note">Seleccionado: <b id="retSelVal">100</b> ms/cavidad · se envía como <code>retardo &lt;ms&gt;</code></div>
           </div>
 
-          <div class="card">
+          <div class="sechead">Actuadores</div>
+          <div class="card" id="prMotores">
             <div style="font-weight:700;font-size:13px;margin-bottom:10px">Motores <span class="muted" style="font-weight:400;font-size:11px">(turbina hasta 100% — máx. recomendado <b>78%</b> · dosificador mínimo 70%)</span></div>
             <div class="motor"><div class="mhead"><span>Turbina <span class="muted" style="font-weight:400">(pin 32)</span></span><span class="v"><span id="pTurbV">0</span>%</span></div><div class="mrow"><input type="range" min="0" max="100" value="0" id="pTurb"/><button class="btn ghost" data-mtog="turb" style="min-width:56px">Máx</button></div></div>
             <div class="motor"><div class="mhead"><span>Dosificador <span class="muted" style="font-weight:400">(pin 13)</span></span><span class="v"><span id="pDosfV">0</span>%</span></div><div class="mrow"><input type="range" min="0" max="100" value="0" id="pDosf"/><button class="btn ghost" data-mtog="dosf" style="min-width:56px">Máx</button></div></div>
@@ -800,7 +847,7 @@
             <div class="note">La frecuencia del PWM cambia el tono/torque del motor. Aplica igual a las pruebas y a la dosificación real, y queda guardada en la tarjeta.</div>
           </div>
 
-          <div class="card">
+          <div class="card" id="prLeds">
             <div style="font-weight:700;font-size:13px;margin-bottom:10px">LEDs y salidas</div>
             <div class="perif">
               <div class="tog"><span style="color:var(--red)">&#9679; <span style="color:var(--ink)">LED Rojo</span></span><div class="sw" data-led="r"></div></div>
@@ -812,7 +859,7 @@
             </div>
           </div>
 
-          <div class="card">
+          <div class="card" id="prSeq">
             <div style="font-weight:700;font-size:13px;margin-bottom:10px">Secuencias rápidas</div>
             <div class="acts">
               <button class="btn primary" data-pcmd="ciclo">Ciclo</button>
@@ -851,7 +898,8 @@
             <div class="note">La respuesta aparece en el terminal de abajo y actualiza el chip de GPS.</div>
           </div>
 
-          <div class="card">
+          <div class="sechead">Monitor y consola</div>
+          <div class="card" id="prMon">
             <div style="font-weight:700;font-size:13px;margin-bottom:2px">Mensajes periódicos (MON)</div>
             <div class="muted" style="font-size:11px;margin-bottom:10px">Estado que el equipo envía cada X segundos.</div>
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -3735,6 +3783,33 @@ $('termFloatBtn').onclick = ()=>{
   try{ localStorage.setItem('dp_termfloat', termFloat?'on':'off') }catch(e){}
   applyTermVisibility()
 }
+
+// v11.3: círculo de guardado en los botones Aplicar/Guardar — girando mientras
+// se envía y "✓ Guardado" al terminar. Los botones que hablan con el equipo no
+// lo muestran si no hay conexión (el aviso de "conéctate" ya sale aparte).
+function btnGuardando(btn, opts){
+  opts = opts || {}
+  if(!btn || btn.dataset.saving) return
+  if(opts.device && transport==='none') return
+  btn.dataset.saving = '1'
+  const orig = btn.innerHTML
+  btn.classList.add('saving')
+  setTimeout(()=>{
+    btn.classList.remove('saving')
+    btn.classList.add('savedok')
+    btn.innerHTML = '&#10003; Guardado'
+    setTimeout(()=>{ btn.classList.remove('savedok'); btn.innerHTML = orig; delete btn.dataset.saving }, 1000)
+  }, opts.ms||900)
+}
+;[['holdOpApply',1],['holdBtApply',1],['reboteApply',1],['atascoApply',1],['rearmeApply',1],['fqApply',1],['monApply',1],['btnDiffPush',1],['btnSendCfg',1],['pdSave',0],['tvSave',0],['pnSave',0]].forEach(par=>{
+  const b = $(par[0]); if(!b) return
+  b.addEventListener('click', ()=> btnGuardando(b, {device: !!par[1], ms: (par[0]==='btnSendCfg'||par[0]==='btnDiffPush') ? 1800 : 900}))
+})
+// v11.3: submenú de secciones en Config y Pruebas — salto suave a la tarjeta
+document.querySelectorAll('.subnav [data-jump]').forEach(el=> el.addEventListener('click', ()=>{
+  const t = $(el.dataset.jump)
+  if(t) t.scrollIntoView({behavior:'smooth', block:'start'})
+}))
 window.__termReady = true
 applyTermVisibility()
 
