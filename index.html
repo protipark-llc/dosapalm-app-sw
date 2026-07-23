@@ -139,6 +139,14 @@
   .stagelabel{font-weight:800;font-size:16px;margin-top:4px}
   .warnbox{background:#fdecec;border:1px solid #f2c4c4;color:#c0392b;border-radius:10px;padding:9px 11px;font-size:12px;font-weight:600;margin-top:10px}
   .term{background:#0b1017;color:#cdd6e4;border-radius:12px;height:120px;overflow-y:auto;padding:8px 10px;font-family:ui-monospace,Consolas,monospace;font-size:10.5px;line-height:1.45}
+  /* v11.2: controles de la consola */
+  .tbtn{border:1px solid var(--line);background:var(--card);color:#48505e;border-radius:8px;padding:4px 9px;font-size:10.5px;font-weight:700;cursor:pointer}
+  .tbtn:hover{background:#f0f3f7}
+  .tbtn.on{border-color:var(--orange);color:var(--orange)}
+  #termWrap .term.expanded{height:56vh}
+  #termWrap.floating{position:fixed;right:14px;bottom:14px;width:min(540px,calc(100vw - 28px));z-index:998;padding:8px;background:rgba(255,255,255,.92);backdrop-filter:blur(4px);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 34px rgba(20,25,40,.22)}
+  #termWrap.floating .term{height:180px}
+  #termWrap.floating .term.expanded{height:56vh}
   /* vista Pruebas (admin): controles de la consola con el estilo de la app */
   .seg{display:flex;background:#eceff4;border-radius:12px;padding:4px;gap:4px}
   .seg div{flex:1;text-align:center;padding:9px;border-radius:9px;font-size:12.5px;font-weight:700;color:#5b6472;cursor:pointer}
@@ -224,8 +232,20 @@
     body.webmode .statusbar{display:none}
     body.webmode .partners{display:none}
     body.webmode .tabbar{display:none}
-    body.webmode .scrn .body{width:100%;max-width:880px;margin:0 auto;padding:22px 30px 40px}
-    body.webmode .apphead{padding:16px 30px}
+    /* v11.2: la versión web usa TODA la pantalla — nada de columna angosta */
+    body.webmode .scrn .body{width:100%;max-width:none;margin:0;padding:22px 34px 46px}
+    /* vistas densas: las tarjetas se reparten en una cuadrícula tipo tablero */
+    body.webmode .scrn[data-scrn="stats"] .body,
+    body.webmode .scrn[data-scrn="config"] .body,
+    body.webmode .scrn[data-scrn="pruebas"] .body{display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:0 18px;align-content:start;align-items:start}
+    /* las vistas de flujo (dosificar, home...) quedan cómodas pero no angostas */
+    body.webmode .scrn[data-scrn="home"] .body,
+    body.webmode .scrn[data-scrn="dosificar"] .body,
+    body.webmode .scrn[data-scrn="perfil"] .body,
+    body.webmode .scrn[data-scrn="vincular"] .body,
+    body.webmode .scrn[data-scrn="alertas"] .body,
+    body.webmode .scrn[data-scrn="dispositivos"] .body{max-width:1080px;margin:0 auto}
+    body.webmode .apphead{padding:16px 34px}
     /* login web: tarjeta centrada, sin barra lateral */
     body.webmode.on-login{padding:28px 20px}
     body.webmode.on-login .wrap{min-height:0}
@@ -294,7 +314,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-23 00:10 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-23 23:21 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -456,19 +476,35 @@
             <div class="row" style="margin-bottom:6px"><span style="font-weight:700;font-size:13px">Aplicaciones de esta sesión</span><span class="muted" style="font-size:11px" id="sPending">0 por sincronizar</span></div>
             <div id="eventList"><div class="muted" style="font-size:12px">Aún no hay aplicaciones.</div></div>
           </div>
+          <!-- v11.2: datos pendientes en el equipo — descargar desde aquí si se pospuso -->
+          <div class="card" id="pendCard" style="display:none;border-color:var(--orange);background:#fff8f2">
+            <div class="row"><span style="font-weight:700;font-size:13px">&#128229; Datos sin descargar del equipo</span><span class="chip a"><span class="d"></span><span id="pendCardN">0</span></span></div>
+            <div class="muted" style="font-size:12px;margin:6px 0 10px" id="pendCardTxt"></div>
+            <button class="btn primary block" id="pendCardGo">Descargar ahora</button>
+          </div>
           <div class="sysgrid">
             <div class="sysbox"><div class="k">Aplicaciones</div><div class="v" style="color:var(--orange);font-size:22px" id="stApps">0</div></div>
             <div class="sysbox"><div class="k">Prod. teórico</div><div class="v" style="font-size:22px"><span id="stGrams">0</span><span class="muted" style="font-size:11px"> g</span></div></div>
             <div class="sysbox"><div class="k">Prom / dosis</div><div class="v" style="font-size:22px"><span id="stAvg">0</span><span class="muted" style="font-size:11px"> g</span></div></div>
           </div>
-          <div class="card">
-            <div class="row" style="margin-bottom:4px"><span style="font-weight:700;font-size:13px">Aplicaciones por hora</span><span class="muted" style="font-size:10.5px">todas las de HOY, según la base de datos</span></div>
-            <div class="calchart" id="stChart" style="height:110px"><div class="calempty">Sin aplicaciones hoy (según la base de datos).</div></div>
-            <div class="row" style="font-size:9.5px;color:#9aa1ad;margin-top:4px"><span id="stT0">—</span><span id="stT1">—</span></div>
+          <!-- v11.2: resumen del DÍA según la base de datos -->
+          <div class="sysgrid" style="grid-template-columns:repeat(4,1fr)">
+            <div class="sysbox"><div class="k">Hoy</div><div class="v" style="color:var(--orange);font-size:22px" id="dApps">0</div></div>
+            <div class="sysbox"><div class="k">Producto hoy</div><div class="v" style="font-size:22px"><span id="dGrams">0</span><span class="muted" style="font-size:11px"> g</span></div></div>
+            <div class="sysbox"><div class="k">&#37; correctas</div><div class="v" style="font-size:22px;color:#2f8a34" id="dOkPct">—</div></div>
+            <div class="sysbox"><div class="k">Última</div><div class="v" style="font-size:18px" id="dLast">—</div></div>
           </div>
           <div class="card">
-            <div style="font-weight:700;font-size:13px;margin-bottom:6px">Resultados</div>
-            <div class="chips" id="stResults"></div>
+            <div class="row" style="margin-bottom:4px"><span style="font-weight:700;font-size:13px">Aplicaciones por hora</span><span class="muted" style="font-size:10.5px">HOY · base de datos</span></div>
+            <div id="stChart" style="margin-top:4px"><div class="calempty" style="height:110px;display:flex;align-items:center;justify-content:center">Sin aplicaciones hoy (según la base de datos).</div></div>
+          </div>
+          <div class="card">
+            <div class="row" style="margin-bottom:4px"><span style="font-weight:700;font-size:13px">Últimos 7 días</span><span class="muted" style="font-size:10.5px">aplicaciones por día · base de datos</span></div>
+            <div id="stChart7"></div>
+          </div>
+          <div class="card">
+            <div class="row" style="margin-bottom:6px"><span style="font-weight:700;font-size:13px">Resultados</span><span class="muted" style="font-size:10.5px">esta sesión</span></div>
+            <div id="stResults"></div>
           </div>
           <!-- v9.6: dashboard global de todos los equipos (solo Admin) -->
           <div class="card" id="dashGlobal" style="display:none">
@@ -871,8 +907,16 @@
         <div class="tabbar" data-tabs></div>
       </div>
 
-      <!-- logs en vivo: SOLO en la vista Pruebas y con el interruptor habilitado -->
-      <div class="body" id="termWrap" style="flex:0 0 auto;padding-top:0"><div class="term" id="term"></div></div>
+      <!-- logs en vivo: en Pruebas, o en TODAS las vistas si se activa el modo flotante -->
+      <div class="body" id="termWrap" style="flex:0 0 auto;padding-top:0">
+        <div style="display:flex;gap:6px;justify-content:flex-end;margin-bottom:5px;flex-wrap:wrap">
+          <button class="tbtn" id="termScrollBtn" title="Seguir automáticamente la última línea">&#11123; Scroll: ON</button>
+          <button class="tbtn" id="termClearBtn" title="Borrar el contenido de la consola">&#129529; Limpiar</button>
+          <button class="tbtn" id="termExpandBtn" title="Agrandar o encoger la consola">&#9974; Expandir</button>
+          <button class="tbtn" id="termFloatBtn" title="Mostrar la consola flotante en todas las pantallas">&#129695; En todas: OFF</button>
+        </div>
+        <div class="term" id="term"></div>
+      </div>
 
       <!-- v11.1: aviso FLOTANTE de datos pendientes — la descarga pide confirmación -->
       <div id="pendBanner" style="display:none;position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:999;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.18);padding:14px 16px;max-width:360px;width:calc(100vw - 32px)">
@@ -1757,9 +1801,18 @@ function mostrarPendBanner(n){
   $('pendBanner').dataset.n = n
 }
 function ocultarPendBanner(){ $('pendBanner').style.display = 'none' }
-$('pendGo').onclick = ()=>{
-  const n = Number($('pendBanner').dataset.n||0)
-  ocultarPendBanner()
+// v11.2: los pendientes también viven en la vista Data (tarjeta pendCard) —
+// si se pospone el banner, la descarga sigue disponible allí.
+let pendCount = 0
+function renderPendCard(){
+  const hay = pendCount>0 && transport!=='none'
+  $('pendCard').style.display = hay ? '' : 'none'
+  if(hay){
+    $('pendCardN').textContent = pendCount
+    $('pendCardTxt').textContent = pendCount+' aplicaciones guardadas en el equipo esperan publicarse en la base de datos. Al confirmarse la descarga completa, se le ordenará al equipo liberar su memoria.'
+  }
+}
+function descargarPendientes(n){
   if(transport==='none'){ pushAlert('El equipo se desconectó: reconéctate para descargar','media'); return }
   lastEvtPullAt = Date.now()
   expectedPend = n
@@ -1767,10 +1820,17 @@ $('pendGo').onclick = ()=>{
   log('!! Descarga CONFIRMADA por el usuario: sincronizando '+n+' aplicaciones...')
   send('evt since 0')
 }
+$('pendGo').onclick = ()=>{
+  const n = Number($('pendBanner').dataset.n||0)
+  ocultarPendBanner()
+  descargarPendientes(n)
+}
+$('pendCardGo').onclick = ()=> descargarPendientes(pendCount)
 $('pendLater').onclick = ()=>{
   ocultarPendBanner()
   pendSnoozeUntil = Date.now() + 5*60000
-  pushAlert('Descarga pospuesta: te lo recordaré en 5 minutos (los datos siguen seguros en el equipo)','info')
+  renderPendCard()
+  pushAlert('Descarga pospuesta: te lo recordaré en 5 minutos — también puedes descargar cuando quieras desde la vista Data','info')
 }
 // v10.8/v11: sondeo cada 10 s del estado de operación Y de los datos
 // pendientes — la respuesta del `evt count` de la conexión puede perderse en
@@ -1886,6 +1946,8 @@ function onLine(line){
         pushAlert('&#128229; El equipo tiene '+nPend+' aplicaciones guardadas esperando publicarse — confirma la descarga en el aviso flotante','info')
       }
     }
+    pendCount = nPend
+    renderPendCard()
     if(nPend===0) ocultarPendBanner()
   } else if((mEvt = /^EVT,(\d+),(\d+),([\d.]+),(\d+),([01]),([-\d.]+),([-\d.]+),(\d+),(\d+),(\d+),(\d+),(\w+)(?:,([^\s,]+))?/.exec(line))){
     const nuevo = dbAdd(dbSerial(), Number(mEvt[1]), {
@@ -2309,35 +2371,87 @@ function renderStats(){
   // resultados (ok / parcial / error)
   const counts = { ok:0, partial:0, error:0 }
   evs.forEach(ev=>{ counts[ev.result]=(counts[ev.result]||0)+1 })
-  $('stResults').innerHTML =
-    `<span class="chip g"><span class="d"></span>${counts.ok} ok</span>`+
-    `<span class="chip a"><span class="d"></span>${counts.partial} parciales</span>`+
-    `<span class="chip r"><span class="d"></span>${counts.error} con error</span>`
-  // v11.1: el diagrama por hora refleja TODAS las aplicaciones del DÍA ACTUAL
-  // según la BASE DE DATOS (todas las descargadas del equipo + las de esta
-  // sesión, que también entran a la base por su línea EVT). La hora de cada
-  // aplicación es la del GPS de la tarjeta; sin GPS, la de su sincronización.
-  const chart = $('stChart')
+  renderResultados(counts)
+  // v11.2: fecha de cada registro de la base (hora GPS; sin GPS, la de sync)
+  const conFecha = dbTodos().map(f=>{
+    const d = f.tsUtc ? new Date(f.tsUtc) : (f.syncedAt ? new Date(f.syncedAt) : null)
+    return (d && !isNaN(d)) ? {d, f} : null
+  }).filter(Boolean)
   const hoy0 = new Date(); hoy0.setHours(0,0,0,0)
-  const horasHoy = []
-  dbTodos().forEach(f=>{
-    let d = f.tsUtc ? new Date(f.tsUtc) : (f.syncedAt ? new Date(f.syncedAt) : null)
-    if(d && !isNaN(d) && d >= hoy0) horasHoy.push(d.getHours())
-  })
-  if(horasHoy.length===0){
-    chart.innerHTML = '<div class="calempty">Sin aplicaciones hoy (según la base de datos).</div>'
-    $('stT0').textContent='—'; $('stT1').textContent='—'
-    return
+  const hoy = conFecha.filter(x=> x.d >= hoy0)
+  // tiles del día
+  $('dApps').textContent = hoy.length
+  $('dGrams').textContent = Math.round(hoy.reduce((a,x)=>a+(x.f.grams||0),0))
+  const okHoy = hoy.filter(x=> x.f.result==='ok').length
+  $('dOkPct').textContent = hoy.length ? Math.round(okHoy/hoy.length*100)+'%' : '—'
+  const ult = hoy.length ? new Date(Math.max(...hoy.map(x=>x.d.getTime()))) : null
+  $('dLast').textContent = ult ? ult.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) : '—'
+  // v11.2: diagrama por hora (HOY) — SVG con eje, rejilla y tooltips
+  if(hoy.length===0){
+    $('stChart').innerHTML = '<div class="calempty" style="height:110px;display:flex;align-items:center;justify-content:center">Sin aplicaciones hoy (según la base de datos).</div>'
+  } else {
+    const horas = hoy.map(x=> x.d.getHours())
+    const h0 = Math.min(...horas), h1 = Math.max(...horas)
+    const b = new Array(h1-h0+1).fill(0)
+    horas.forEach(h=> b[h-h0]++)
+    $('stChart').innerHTML = barChartSVG(
+      b.map((_,i)=> String(h0+i).padStart(2,'0')),
+      b,
+      (i,n)=> String(h0+i).padStart(2,'0')+':00–'+String(h0+i+1).padStart(2,'0')+':00 · '+n+' aplicaciones'
+    )
   }
-  const h0 = Math.min(...horasHoy), h1 = Math.max(...horasHoy)
-  const buckets = new Array(h1-h0+1).fill(0)
-  horasHoy.forEach(h=> buckets[h-h0]++)
-  const max = Math.max(...buckets, 1)
-  chart.innerHTML = buckets.map((n,i)=>
-    `<div class="calbar${n>0?' ok':''}" style="height:${Math.max(4, Math.round(n/max*100))}%" title="${String(h0+i).padStart(2,'0')}:00 - ${String(h0+i+1).padStart(2,'0')}:00: ${n} aplicaciones">${n>0?`<span class="calnum">${n}</span>`:''}</div>`
-  ).join('')
-  $('stT0').textContent = String(h0).padStart(2,'0')+':00'
-  $('stT1').textContent = String(h1+1).padStart(2,'0')+':00'
+  // v11.2: últimos 7 días (aplicaciones por día)
+  const dias = [], vals7 = []
+  for(let k=6; k>=0; k--){
+    const d0 = new Date(hoy0.getTime() - k*86400000)
+    const d1 = new Date(d0.getTime() + 86400000)
+    dias.push(d0.toLocaleDateString('es-CO',{weekday:'short'}).replace('.',''))
+    vals7.push(conFecha.filter(x=> x.d>=d0 && x.d<d1).length)
+  }
+  $('stChart7').innerHTML = vals7.some(v=>v>0)
+    ? barChartSVG(dias, vals7, (i,n)=> dias[i]+' · '+n+' aplicaciones')
+    : '<div class="calempty" style="height:96px;display:flex;align-items:center;justify-content:center">Sin aplicaciones esta semana.</div>'
+}
+// v11.2: barra de gráfico SVG reutilizable — marcas delgadas con tope
+// redondeado, rejilla y ejes discretos, número solo sobre las barras con datos.
+function barChartSVG(labels, values, tip){
+  const W = 640, H = 150, padL = 26, padR = 8, padT = 18, padB = 20
+  const iw = W - padL - padR, ih = H - padT - padB
+  const max = Math.max(...values, 1)
+  const n = values.length
+  const step = iw / n
+  const bw = Math.min(34, Math.max(8, step * 0.6))
+  const grid = [0.5, 1].map(f=>{
+    const y = padT + ih - ih*f
+    return `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="var(--line)" stroke-width="1"/>`+
+      `<text x="${padL-5}" y="${y+3}" text-anchor="end" font-size="8.5" fill="#9aa1ad">${Math.round(max*f)}</text>`
+  }).join('')
+  const bars = values.map((v,i)=>{
+    const x = padL + step*i + (step-bw)/2
+    const h = Math.max(v>0 ? 4 : 0, Math.round(v/max*ih))
+    const y = padT + ih - h
+    const cada = n>14 ? 2 : 1   // con muchas barras, rotular una de cada dos
+    return `<g><title>${tip(i, v)}</title>`+
+      (v>0 ? `<rect x="${x}" y="${y}" width="${bw}" height="${h+4}" rx="4" fill="var(--orange)"/>`+
+             `<rect x="${x}" y="${padT+ih}" width="${bw}" height="5" fill="var(--card)"/>`+
+             `<text x="${x+bw/2}" y="${y-4}" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--ink)">${v}</text>` : '')+
+      (i%cada===0 ? `<text x="${padL+step*i+step/2}" y="${H-6}" text-anchor="middle" font-size="8.5" fill="#9aa1ad">${labels[i]}</text>` : '')+
+      `<rect x="${padL+step*i}" y="${padT}" width="${step}" height="${ih}" fill="transparent"/></g>`
+  }).join('')
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block" xmlns="http://www.w3.org/2000/svg">${grid}`+
+    `<line x1="${padL}" y1="${padT+ih}" x2="${W-padR}" y2="${padT+ih}" stroke="#c9d2de" stroke-width="1"/>${bars}</svg>`
+}
+// v11.2: resultados como barra apilada con leyenda (verde/ámbar/rojo + texto)
+function renderResultados(c){
+  const tot = c.ok + c.partial + c.error
+  if(tot===0){ $('stResults').innerHTML = '<div class="muted" style="font-size:12px">Aún no hay aplicaciones en esta sesión.</div>'; return }
+  const seg = (n,color)=> n>0 ? `<div style="flex:${n};background:${color};border-right:2px solid var(--card)"></div>` : ''
+  $('stResults').innerHTML =
+    `<div style="display:flex;height:14px;border-radius:99px;overflow:hidden;background:#eef1f5">${seg(c.ok,'var(--green)')}${seg(c.partial,'var(--amber)')}${seg(c.error,'var(--red)')}</div>`+
+    `<div style="display:flex;gap:14px;margin-top:8px;font-size:11.5px">`+
+    `<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:5px"></span>${c.ok} correctas</span>`+
+    `<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--amber);margin-right:5px"></span>${c.partial} parciales</span>`+
+    `<span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--red);margin-right:5px"></span>${c.error} con error</span></div>`
 }
 // v9.6: dashboard global (solo Admin) — suma y segmentación por equipo de la
 // base de datos sincronizada desde los ESP32.
@@ -2347,16 +2461,26 @@ function renderDash(){
   renderDbList()   // la base de datos SIEMPRE se pinta, haya o no dashboard
   const series = Object.keys(db).sort()
   if(series.length===0){ host.innerHTML='<div class="muted" style="font-size:12px">Aún no hay aplicaciones sincronizadas de ningún equipo.</div>'; return }
-  let totA=0, totG=0
+  // v11.2: por equipo — participación (barra), % correctas y producto
+  const stats = series.map(s=>{
+    const apps = Object.values(db[s].apps||{})
+    const g = apps.reduce((a,e)=>a+(e.grams||0),0)
+    const ok = apps.filter(e=>e.result==='ok').length
+    return {s, n:apps.length, g, ok}
+  })
+  const totA = stats.reduce((a,x)=>a+x.n,0), totG = stats.reduce((a,x)=>a+x.g,0)
   host.innerHTML =
-    '<div class="row" style="font-size:10px;color:var(--muted2);text-transform:uppercase;margin-bottom:2px"><span style="flex:1.4">Equipo</span><span style="flex:1">Aplicaciones</span><span style="flex:1">Producto</span></div>'+
-    series.map(s=>{
-      const apps = Object.values(db[s].apps||{})
-      const g = apps.reduce((a,e)=>a+(e.grams||0),0)
-      totA += apps.length; totG += g
-      return `<div class="row" style="font-size:12px;padding:5px 0;border-top:1px solid var(--line)"><span style="flex:1.4;font-weight:700">&#128225; ${s}</span><span style="flex:1">${apps.length}</span><span style="flex:1">${Math.round(g)} g</span></div>`
+    stats.map(x=>{
+      const share = totA ? Math.round(x.n/totA*100) : 0
+      const okPct = x.n ? Math.round(x.ok/x.n*100) : 0
+      return `<div style="padding:7px 0;border-top:1px solid var(--line)">`+
+        `<div class="row" style="font-size:12px"><span style="font-weight:700">&#128225; ${x.s}</span>`+
+        `<span class="muted" style="font-size:11px">${x.n} aplic. · ${Math.round(x.g)} g · ${okPct}% correctas</span></div>`+
+        `<div style="height:8px;background:#eef1f5;border-radius:99px;margin-top:5px;overflow:hidden" title="${x.s}: ${share}% del total de aplicaciones">`+
+        `<div style="height:100%;width:${Math.max(2,share)}%;background:var(--orange);border-radius:99px"></div></div>`+
+      `</div>`
     }).join('')+
-    `<div class="row" style="font-size:12.5px;padding:6px 0;border-top:2px solid var(--line);font-weight:800"><span style="flex:1.4">TOTAL</span><span style="flex:1">${totA}</span><span style="flex:1">${Math.round(totG)} g</span></div>`
+    `<div class="row" style="font-size:12.5px;padding:7px 0;border-top:2px solid var(--line);font-weight:800"><span>TOTAL</span><span>${totA} aplicaciones · ${Math.round(totG)} g</span></div>`
 }
 // v10.7: listado completo de la base de datos (todos los equipos, recientes primero)
 function dbTodos(){
@@ -2635,7 +2759,11 @@ function renderAlerts(){
 }
 
 function fmt(ts){ if(!ts) return '—'; const d=new Date(ts); return d.getHours()+':'+String(d.getMinutes()).padStart(2,'0') }
-function log(s){ const t=$('term'); const d=document.createElement('div'); d.textContent=s; t.appendChild(d); if(t.children.length>200)t.removeChild(t.firstChild); t.scrollTop=t.scrollHeight }
+// v11.2: controles de la consola — declarados AQUÍ porque log() corre desde el
+// auto-login, antes de que se ejecute el bloque de la vista Pruebas.
+let termScroll = (localStorage.getItem('dp_termscroll')||'on')==='on'
+let termFloat = (localStorage.getItem('dp_termfloat')||'off')==='on'
+function log(s){ const t=$('term'); const d=document.createElement('div'); d.textContent=s; t.appendChild(d); if(t.children.length>500)t.removeChild(t.firstChild); if(termScroll) t.scrollTop=t.scrollHeight }
 
 // ---------- wiring ----------
 function newTracker(){ tracker = new DoseTracker({ device_serial: $('serialTxt').textContent!=='—'?$('serialTxt').textContent:'DOSAPALM-50083', session_id: 's-'+Date.now(), operator_id: profile==='admin'?'op-admin':'op-lider' }) }
@@ -3575,15 +3703,38 @@ $('pCmd').addEventListener('keydown', e=>{ if(e.key==='Enter') $('pCmdSend').cli
 // logs y comando serial: SOLO en Pruebas, y con interruptor para habilitarlos
 let termOn = (localStorage.getItem('dp_term')||'on')==='on'
 function applyTermVisibility(){
-  $('termWrap').style.display = (current==='pruebas' && termOn) ? '' : 'none'
+  const visible = termOn && (current==='pruebas' || termFloat)
+  $('termWrap').style.display = visible ? '' : 'none'
+  $('termWrap').classList.toggle('floating', termFloat && current!=='pruebas')
   $('cmdRow').style.display = termOn ? '' : 'none'
   $('termSw').classList.toggle('on', termOn)
+  $('termScrollBtn').innerHTML = '&#11123; Scroll: '+(termScroll?'ON':'OFF')
+  $('termScrollBtn').classList.toggle('on', termScroll)
+  $('termFloatBtn').innerHTML = '&#129695; En todas: '+(termFloat?'ON':'OFF')
+  $('termFloatBtn').classList.toggle('on', termFloat)
 }
 $('termSw').addEventListener('click', ()=>{
   termOn = !termOn
   try{ localStorage.setItem('dp_term', termOn?'on':'off') }catch(e){}
   applyTermVisibility()
 })
+$('termScrollBtn').onclick = ()=>{
+  termScroll = !termScroll
+  try{ localStorage.setItem('dp_termscroll', termScroll?'on':'off') }catch(e){}
+  if(termScroll){ const t=$('term'); t.scrollTop = t.scrollHeight }
+  applyTermVisibility()
+}
+$('termClearBtn').onclick = ()=>{ $('term').innerHTML = '' }
+$('termExpandBtn').onclick = ()=>{
+  const ex = $('term').classList.toggle('expanded')
+  $('termExpandBtn').innerHTML = ex ? '&#9974; Encoger' : '&#9974; Expandir'
+  if(termScroll){ const t=$('term'); t.scrollTop = t.scrollHeight }
+}
+$('termFloatBtn').onclick = ()=>{
+  termFloat = !termFloat
+  try{ localStorage.setItem('dp_termfloat', termFloat?'on':'off') }catch(e){}
+  applyTermVisibility()
+}
 window.__termReady = true
 applyTermVisibility()
 
