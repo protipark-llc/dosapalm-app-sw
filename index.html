@@ -328,7 +328,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-23 23:34 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-23 23:40 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -1890,6 +1890,7 @@ function renderPendCard(){
     $('pendCardTxt').textContent = pendCount+' aplicaciones guardadas en el equipo esperan publicarse en la base de datos. Al confirmarse la descarga completa, se le ordenará al equipo liberar su memoria.'
   }
 }
+let pendDlTimer = null   // v11.5: plan B si el cierre EVT END se pierde por BLE
 function descargarPendientes(n){
   if(transport==='none'){ pushAlert('El equipo se desconectó: reconéctate para descargar','media'); return }
   lastEvtPullAt = Date.now()
@@ -1897,6 +1898,22 @@ function descargarPendientes(n){
   evtRecvCount = 0
   log('!! Descarga CONFIRMADA por el usuario: sincronizando '+n+' aplicaciones...')
   send('evt since 0')
+  // v11.5: si en 10 s no llegó el EVT END (línea perdida por BLE), cerrar por
+  // CONTEO: sabemos cuántas esperábamos (EVT COUNT); si llegaron todas, la
+  // descarga está confirmada igual y se ordena la limpieza. Si no, se avisa y
+  // la memoria del equipo NO se toca.
+  clearTimeout(pendDlTimer)
+  pendDlTimer = setTimeout(()=>{
+    if(expectedPend<=0) return   // ya cerró con EVT END
+    if(evtRecvCount >= expectedPend && syncMaxSeq>0){
+      pushAlert('✓ Descarga confirmada por conteo: '+evtRecvCount+' de '+expectedPend+' aplicaciones (el cierre del equipo se perdió por Bluetooth) — ordenando limpieza de la memoria','info')
+      send(cmd.evtAck(syncMaxSeq)); syncMaxSeq = 0
+    } else {
+      pushAlert('⚠ Descarga INCOMPLETA: llegaron '+evtRecvCount+' de '+expectedPend+' aplicaciones — vuelve a intentar desde el aviso o la vista Data (la memoria del equipo NO se toca)','warn')
+      lastEvtPullAt = 0
+    }
+    evtRecvCount = 0; expectedPend = 0
+  }, 10000)
 }
 $('pendGo').onclick = ()=>{
   const n = Number($('pendBanner').dataset.n||0)
@@ -2059,15 +2076,18 @@ function onLine(line){
       render()
     }
   }
-  // v11.1: fin de la descarga — CONFIRMAR antes de ordenar la limpieza
-  if((mEvt = /^EVT END (\d+)/.exec(line))){
+  // v11.1: fin de la descarga — CONFIRMAR antes de ordenar la limpieza.
+  // v11.5: solo con una descarga EN CURSO (expectedPend>0) — el equipo repite
+  // EVT END contra pérdidas BLE y el duplicado debe ignorarse.
+  if((mEvt = /^EVT END (\d+)/.exec(line)) && expectedPend>0){
+    clearTimeout(pendDlTimer)
     const enviados = Number(mEvt[1])
     if(enviados>0 && evtRecvCount >= enviados){
       pushAlert('✓ Descarga confirmada: '+enviados+' aplicaciones recibidas completas — ordenando limpieza de la memoria del equipo','info')
       if(syncMaxSeq>0){ send(cmd.evtAck(syncMaxSeq)); syncMaxSeq = 0 }
     } else if(enviados>0){
-      pushAlert('⚠ Descarga INCOMPLETA: llegaron '+evtRecvCount+' de '+enviados+' aplicaciones — se reintentará (la memoria del equipo NO se toca)','warn')
-      lastEvtPullAt = 0   // el próximo sondeo (≤10 s) reintenta
+      pushAlert('⚠ Descarga INCOMPLETA: llegaron '+evtRecvCount+' de '+enviados+' aplicaciones — vuelve a intentar desde el aviso o la vista Data (la memoria del equipo NO se toca)','warn')
+      lastEvtPullAt = 0
       syncMaxSeq = 0
     }
     evtRecvCount = 0; expectedPend = 0
