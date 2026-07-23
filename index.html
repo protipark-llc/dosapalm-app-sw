@@ -250,6 +250,8 @@
     body.webmode .scrn[data-scrn="config"] .body,
     body.webmode .scrn[data-scrn="pruebas"] .body{display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:0 18px;align-content:start;align-items:start}
     body.webmode .subnav,body.webmode .sechead{grid-column:1/-1}
+    /* v11.4: el gráfico de Data ocupa TODO el ancho del tablero */
+    body.webmode #chartCard{grid-column:1/-1}
     /* las vistas de flujo (dosificar, home...) quedan cómodas pero no angostas */
     body.webmode .scrn[data-scrn="home"] .body,
     body.webmode .scrn[data-scrn="dosificar"] .body,
@@ -326,7 +328,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-23 23:28 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-23 23:34 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -506,13 +508,25 @@
             <div class="sysbox"><div class="k">&#37; correctas</div><div class="v" style="font-size:22px;color:#2f8a34" id="dOkPct">—</div></div>
             <div class="sysbox"><div class="k">Última</div><div class="v" style="font-size:18px" id="dLast">—</div></div>
           </div>
-          <div class="card">
-            <div class="row" style="margin-bottom:4px"><span style="font-weight:700;font-size:13px">Aplicaciones por hora</span><span class="muted" style="font-size:10.5px">HOY · base de datos</span></div>
-            <div id="stChart" style="margin-top:4px"><div class="calempty" style="height:110px;display:flex;align-items:center;justify-content:center">Sin aplicaciones hoy (según la base de datos).</div></div>
-          </div>
-          <div class="card">
-            <div class="row" style="margin-bottom:4px"><span style="font-weight:700;font-size:13px">Últimos 7 días</span><span class="muted" style="font-size:10.5px">aplicaciones por día · base de datos</span></div>
-            <div id="stChart7"></div>
+          <!-- v11.4: gráfico grande con filtros y vista por año/mes/día/hora -->
+          <div class="card" id="chartCard">
+            <div class="row" style="margin-bottom:8px;flex-wrap:wrap;gap:8px">
+              <span style="font-weight:700;font-size:13px">Aplicaciones <span class="muted" id="chSub" style="font-weight:400;font-size:10.5px"></span></span>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                <select class="numin" id="chEquipo" style="margin:0;width:auto;padding:5px 8px;font-size:11px;text-align:left"><option value="all">Todos los equipos</option></select>
+                <select class="numin" id="chRes" style="margin:0;width:auto;padding:5px 8px;font-size:11px;text-align:left">
+                  <option value="all">Todos los resultados</option>
+                  <option value="ok">Correctas</option>
+                  <option value="partial">Parciales</option>
+                  <option value="error">Con error</option>
+                </select>
+                <div class="seg" id="chSeg" style="margin:0;width:auto">
+                  <div data-ch="hora">Hora</div><div data-ch="dia">Día</div><div data-ch="mes">Mes</div><div data-ch="ano">Año</div>
+                </div>
+              </div>
+            </div>
+            <div id="stChart"><div class="calempty" style="height:180px;display:flex;align-items:center;justify-content:center">Sin aplicaciones (según la base de datos).</div></div>
+            <div class="row" style="margin-top:6px;font-size:11px" id="chTot"></div>
           </div>
           <div class="card">
             <div class="row" style="margin-bottom:6px"><span style="font-weight:700;font-size:13px">Resultados</span><span class="muted" style="font-size:10.5px">esta sesión</span></div>
@@ -527,8 +541,24 @@
           <!-- v10.7: base de datos completa — todos los registros de todos los equipos -->
           <div class="card" id="dbCard" style="display:none">
             <div class="row"><span style="font-weight:700;font-size:13px">&#128451; Base de datos — todas las aplicaciones</span><span class="muted" style="font-size:10.5px" id="dbCount">0 registros</span></div>
+            <!-- v11.4: filtros por fecha y por columna -->
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:6px;margin-top:8px">
+              <div><div class="muted" style="font-size:9.5px;margin-bottom:2px">Equipo</div><select class="numin dbf" id="fEquipo" style="margin:0;padding:6px;font-size:11px;text-align:left"><option value="all">Todos</option></select></div>
+              <div><div class="muted" style="font-size:9.5px;margin-bottom:2px">Desde</div><input type="date" class="numin dbf" id="fDesde" style="margin:0;padding:6px;font-size:11px"/></div>
+              <div><div class="muted" style="font-size:9.5px;margin-bottom:2px">Hasta</div><input type="date" class="numin dbf" id="fHasta" style="margin:0;padding:6px;font-size:11px"/></div>
+              <div><div class="muted" style="font-size:9.5px;margin-bottom:2px"># seq</div><input type="number" class="numin dbf" id="fSeq" placeholder="—" style="margin:0;padding:6px;font-size:11px"/></div>
+              <div><div class="muted" style="font-size:9.5px;margin-bottom:2px">Gramos mín</div><input type="number" class="numin dbf" id="fGmin" placeholder="—" style="margin:0;padding:6px;font-size:11px"/></div>
+              <div><div class="muted" style="font-size:9.5px;margin-bottom:2px">Gramos máx</div><input type="number" class="numin dbf" id="fGmax" placeholder="—" style="margin:0;padding:6px;font-size:11px"/></div>
+              <div><div class="muted" style="font-size:9.5px;margin-bottom:2px">GPS</div><select class="numin dbf" id="fGps" style="margin:0;padding:6px;font-size:11px;text-align:left"><option value="all">Todos</option><option value="si">Con GPS</option><option value="no">Sin GPS</option></select></div>
+              <div><div class="muted" style="font-size:9.5px;margin-bottom:2px">Resultado</div><select class="numin dbf" id="fRes" style="margin:0;padding:6px;font-size:11px;text-align:left"><option value="all">Todos</option><option value="ok">ok</option><option value="partial">parcial</option><option value="error">error</option></select></div>
+            </div>
+            <div style="display:flex;gap:7px;margin-top:7px">
+              <button class="btn ghost" id="fClear" style="flex:1;padding:7px;font-size:11px">Limpiar filtros</button>
+              <button class="btn ghost" id="fDelFiltered" style="flex:1;padding:7px;font-size:11px;color:var(--red);border-color:var(--red)">&#128465; Eliminar filtrados</button>
+            </div>
             <div id="dbList" style="margin-top:6px;max-height:280px;overflow-y:auto"></div>
-            <button class="btn ghost block" id="btnExportDb" style="margin-top:8px">&#11015; Exportar CSV (todos los equipos)</button>
+            <button class="btn ghost block" id="btnExportDb" style="margin-top:8px">&#11015; Exportar CSV (lo filtrado)</button>
+            <div class="note">Eliminar borra los registros <b>de la base de datos de la app</b> (este navegador). No toca el equipo: si el registro sigue pendiente en el ESP32, volverá a entrar al descargarlo.</div>
           </div>
         </div>
         <div class="tabbar" data-tabs></div>
@@ -2434,36 +2464,85 @@ function renderStats(){
   $('dOkPct').textContent = hoy.length ? Math.round(okHoy/hoy.length*100)+'%' : '—'
   const ult = hoy.length ? new Date(Math.max(...hoy.map(x=>x.d.getTime()))) : null
   $('dLast').textContent = ult ? ult.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}) : '—'
-  // v11.2: diagrama por hora (HOY) — SVG con eje, rejilla y tooltips
-  if(hoy.length===0){
-    $('stChart').innerHTML = '<div class="calempty" style="height:110px;display:flex;align-items:center;justify-content:center">Sin aplicaciones hoy (según la base de datos).</div>'
-  } else {
-    const horas = hoy.map(x=> x.d.getHours())
-    const h0 = Math.min(...horas), h1 = Math.max(...horas)
-    const b = new Array(h1-h0+1).fill(0)
-    horas.forEach(h=> b[h-h0]++)
-    $('stChart').innerHTML = barChartSVG(
-      b.map((_,i)=> String(h0+i).padStart(2,'0')),
-      b,
-      (i,n)=> String(h0+i).padStart(2,'0')+':00–'+String(h0+i+1).padStart(2,'0')+':00 · '+n+' aplicaciones'
-    )
-  }
-  // v11.2: últimos 7 días (aplicaciones por día)
-  const dias = [], vals7 = []
-  for(let k=6; k>=0; k--){
-    const d0 = new Date(hoy0.getTime() - k*86400000)
-    const d1 = new Date(d0.getTime() + 86400000)
-    dias.push(d0.toLocaleDateString('es-CO',{weekday:'short'}).replace('.',''))
-    vals7.push(conFecha.filter(x=> x.d>=d0 && x.d<d1).length)
-  }
-  $('stChart7').innerHTML = vals7.some(v=>v>0)
-    ? barChartSVG(dias, vals7, (i,n)=> dias[i]+' · '+n+' aplicaciones')
-    : '<div class="calempty" style="height:96px;display:flex;align-items:center;justify-content:center">Sin aplicaciones esta semana.</div>'
+  // v11.4: gráfico grande con filtros (equipo, resultado) y vista por
+  // año / mes / día / hora. Los filtros solo afectan al gráfico.
+  renderChart(conFecha, hoy0)
 }
+// v11.4: estado del gráfico de Data (persistente)
+let chMode = localStorage.getItem('dp_chmode')||'hora'
+function renderChart(conFecha, hoy0){
+  // poblar el filtro de equipos sin perder la selección
+  const sel = $('chEquipo')
+  const seriales = Object.keys(db).sort()
+  const selVal = sel.value || 'all'
+  if(sel.options.length !== seriales.length+1){
+    sel.innerHTML = '<option value="all">Todos los equipos</option>'+seriales.map(s=>`<option value="${s}">${s}</option>`).join('')
+    sel.value = seriales.indexOf(selVal)>=0 ? selVal : 'all'
+  }
+  document.querySelectorAll('#chSeg div').forEach(d=> d.classList.toggle('on', d.dataset.ch===chMode))
+  // filtros
+  let evs = conFecha
+  if(sel.value!=='all') evs = evs.filter(x=> x.f.serial===sel.value)
+  if($('chRes').value!=='all') evs = evs.filter(x=> x.f.result===$('chRes').value)
+  // buckets según el modo
+  const DIA = 86400000
+  let labels=[], vals=[], gs=[], tip, sub
+  const bucket = (arr, keyFn, lbls, keys)=>{
+    const m = {}; const g = {}
+    arr.forEach(x=>{ const k=keyFn(x.d); m[k]=(m[k]||0)+1; g[k]=(g[k]||0)+(x.f.grams||0) })
+    labels = lbls; vals = keys.map(k=> m[k]||0); gs = keys.map(k=> Math.round(g[k]||0))
+  }
+  if(chMode==='hora'){
+    sub = 'por hora · HOY'
+    const hoy = evs.filter(x=> x.d>=hoy0)
+    const hs = hoy.map(x=>x.d.getHours())
+    const h0 = hs.length?Math.min(...hs):0, h1 = hs.length?Math.max(...hs):0
+    const keys=[]; for(let h=h0; h<=h1; h++) keys.push(h)
+    bucket(hoy, d=>d.getHours(), keys.map(h=>String(h).padStart(2,'0')), keys)
+    tip = (i,n)=> String(h0+i).padStart(2,'0')+':00–'+String(h0+i+1).padStart(2,'0')+':00 · '+n+' aplicaciones · '+gs[i]+' g'
+  } else if(chMode==='dia'){
+    sub = 'por día · últimos 30 días'
+    const keys=[], lbls=[]
+    for(let k=29;k>=0;k--){ const d0=new Date(hoy0.getTime()-k*DIA); keys.push(d0.toDateString()); lbls.push(String(d0.getDate())+'/'+String(d0.getMonth()+1)) }
+    bucket(evs.filter(x=> x.d>=new Date(hoy0.getTime()-29*DIA)), d=>{const c=new Date(d); c.setHours(0,0,0,0); return c.toDateString()}, lbls, keys)
+    tip = (i,n)=> labels[i]+' · '+n+' aplicaciones · '+gs[i]+' g'
+  } else if(chMode==='mes'){
+    sub = 'por mes · últimos 12 meses'
+    const keys=[], lbls=[]
+    for(let k=11;k>=0;k--){ const d0=new Date(hoy0.getFullYear(), hoy0.getMonth()-k, 1); keys.push(d0.getFullYear()+'-'+d0.getMonth()); lbls.push(d0.toLocaleDateString('es-CO',{month:'short'}).replace('.','')) }
+    bucket(evs, d=> d.getFullYear()+'-'+d.getMonth(), lbls, keys)
+    tip = (i,n)=> labels[i]+' · '+n+' aplicaciones · '+gs[i]+' g'
+  } else {
+    sub = 'por año · todo el histórico'
+    const ys = evs.map(x=>x.d.getFullYear())
+    const y0 = ys.length?Math.min(...ys):hoy0.getFullYear(), y1 = ys.length?Math.max(...ys):hoy0.getFullYear()
+    const keys=[]; for(let y=y0; y<=y1; y++) keys.push(y)
+    bucket(evs, d=>d.getFullYear(), keys.map(String), keys)
+    tip = (i,n)=> labels[i]+' · '+n+' aplicaciones · '+gs[i]+' g'
+  }
+  $('chSub').textContent = sub+' · base de datos'
+  const tot = vals.reduce((a,b)=>a+b,0), totG = gs.reduce((a,b)=>a+b,0)
+  if(tot===0){
+    $('stChart').innerHTML = '<div class="calempty" style="height:180px;display:flex;align-items:center;justify-content:center">Sin aplicaciones en este rango (según la base de datos).</div>'
+    $('chTot').innerHTML = ''
+  } else {
+    $('stChart').innerHTML = barChartSVG(labels, vals, tip, {W:960, H:230})
+    $('chTot').innerHTML = '<span class="muted">Total del rango</span><span style="font-weight:800">'+tot+' aplicaciones · '+totG+' g</span>'
+  }
+}
+$('chSeg').addEventListener('click', e=>{
+  const d = e.target.closest('[data-ch]'); if(!d) return
+  chMode = d.dataset.ch
+  try{ localStorage.setItem('dp_chmode', chMode) }catch(e2){}
+  renderStats()
+})
+$('chEquipo').addEventListener('change', ()=> renderStats())
+$('chRes').addEventListener('change', ()=> renderStats())
 // v11.2: barra de gráfico SVG reutilizable — marcas delgadas con tope
 // redondeado, rejilla y ejes discretos, número solo sobre las barras con datos.
-function barChartSVG(labels, values, tip){
-  const W = 640, H = 150, padL = 26, padR = 8, padT = 18, padB = 20
+function barChartSVG(labels, values, tip, opts){
+  opts = opts || {}
+  const W = opts.W||640, H = opts.H||150, padL = 26, padR = 8, padT = 18, padB = 20
   const iw = W - padL - padR, ih = H - padT - padB
   const max = Math.max(...values, 1)
   const n = values.length
@@ -2545,22 +2624,84 @@ function horaEv(f){
   }
   return '—'
 }
+// v11.4: filtros de la base de datos (fecha + cada columna)
+function dbFecha(f){
+  const d = f.tsUtc ? new Date(f.tsUtc) : (f.syncedAt ? new Date(f.syncedAt) : null)
+  return (d && !isNaN(d)) ? d : null
+}
+function dbFiltradas(){
+  let filas = dbTodos()
+  const eq=$('fEquipo').value, de=$('fDesde').value, ha=$('fHasta').value
+  const sq=$('fSeq').value, g0=$('fGmin').value, g1=$('fGmax').value
+  const gps=$('fGps').value, res=$('fRes').value
+  if(eq!=='all') filas = filas.filter(f=> f.serial===eq)
+  if(de){ const d=new Date(de+'T00:00:00'); filas = filas.filter(f=>{ const x=dbFecha(f); return x && x>=d }) }
+  if(ha){ const d=new Date(ha+'T23:59:59'); filas = filas.filter(f=>{ const x=dbFecha(f); return x && x<=d }) }
+  if(sq!=='') filas = filas.filter(f=> f.seq===Number(sq))
+  if(g0!=='') filas = filas.filter(f=> f.grams>=Number(g0))
+  if(g1!=='') filas = filas.filter(f=> f.grams<=Number(g1))
+  if(gps!=='all') filas = filas.filter(f=> gps==='si' ? f.fix : !f.fix)
+  if(res!=='all') filas = filas.filter(f=> f.result===res)
+  return filas
+}
 function renderDbList(){
   const host = $('dbList')
   if(!host) return
-  const filas = dbTodos()
-  $('dbCount').textContent = filas.length+' registro'+(filas.length===1?'':'s')
-  if(filas.length===0){ host.innerHTML='<div class="muted" style="font-size:12px">Sin registros todavía.</div>'; return }
+  // poblar el filtro de equipos sin perder la selección
+  const fe = $('fEquipo'), seriales = Object.keys(db).sort()
+  if(fe.options.length !== seriales.length+1){
+    const v = fe.value||'all'
+    fe.innerHTML = '<option value="all">Todos</option>'+seriales.map(s=>`<option value="${s}">${s}</option>`).join('')
+    fe.value = seriales.indexOf(v)>=0 ? v : 'all'
+  }
+  const todas = dbTodos()
+  const filas = dbFiltradas()
+  $('dbCount').textContent = filas.length===todas.length
+    ? filas.length+' registro'+(filas.length===1?'':'s')
+    : filas.length+' de '+todas.length+' registros (filtrado)'
+  if(todas.length===0){ host.innerHTML='<div class="muted" style="font-size:12px">Sin registros todavía.</div>'; return }
+  if(filas.length===0){ host.innerHTML='<div class="muted" style="font-size:12px">Ningún registro coincide con los filtros.</div>'; return }
   host.innerHTML =
-    '<div class="row" style="font-size:10px;color:var(--muted2);text-transform:uppercase;margin-bottom:2px"><span style="flex:1.3">Equipo</span><span style="flex:.4">#</span><span style="flex:1.1">Hora</span><span style="flex:.7">Gramos</span><span style="flex:.8">Retardo</span><span style="flex:.5">GPS</span><span style="flex:.7">Resultado</span></div>'+
+    '<div class="row" style="font-size:10px;color:var(--muted2);text-transform:uppercase;margin-bottom:2px"><span style="flex:1.3">Equipo</span><span style="flex:.4">#</span><span style="flex:1.1">Hora</span><span style="flex:.7">Gramos</span><span style="flex:.8">Retardo</span><span style="flex:.5">GPS</span><span style="flex:.7">Resultado</span><span style="flex:.4"></span></div>'+
     filas.slice(0,60).map(f=>
-      `<div class="row" style="font-size:11.5px;padding:4px 0;border-top:1px solid var(--line)"><span style="flex:1.3">${f.serial}</span><span style="flex:.4">${f.seq}</span><span style="flex:1.1">${horaEv(f)}</span><span style="flex:.7;font-weight:700">${f.grams} g</span><span style="flex:.8">${f.retardo} ms</span><span style="flex:.5">${f.fix?'&#10003;':'—'}</span><span style="flex:.7;color:${f.result==='ok'?'#2f8a34':(f.result==='partial'?'#b9791a':'#c0392b')};font-weight:700">${f.result}</span></div>`
+      `<div class="row" style="font-size:11.5px;padding:4px 0;border-top:1px solid var(--line)"><span style="flex:1.3">${f.serial}</span><span style="flex:.4">${f.seq}</span><span style="flex:1.1">${horaEv(f)}</span><span style="flex:.7;font-weight:700">${f.grams} g</span><span style="flex:.8">${f.retardo} ms</span><span style="flex:.5">${f.fix?'&#10003;':'—'}</span><span style="flex:.7;color:${f.result==='ok'?'#2f8a34':(f.result==='partial'?'#b9791a':'#c0392b')};font-weight:700">${f.result}</span><span style="flex:.4;text-align:right;cursor:pointer" title="Eliminar este registro de la base de la app" data-dbdel="${f.serial}|${f.seq}">&#128465;</span></div>`
     ).join('')+
-    (filas.length>60 ? `<div class="muted" style="font-size:10.5px;margin-top:4px">…y ${filas.length-60} más (todos van en el CSV)</div>` : '')
+    (filas.length>60 ? `<div class="muted" style="font-size:10.5px;margin-top:4px">…y ${filas.length-60} más (todos los filtrados van en el CSV)</div>` : '')
+}
+// filtros: cualquier cambio re-pinta; limpiar los restablece
+document.querySelectorAll('.dbf').forEach(el=>{
+  el.addEventListener('change', ()=>{ renderDbList() })
+  el.addEventListener('input', ()=>{ renderDbList() })
+})
+$('fClear').onclick = ()=>{
+  $('fEquipo').value='all'; $('fDesde').value=''; $('fHasta').value=''
+  $('fSeq').value=''; $('fGmin').value=''; $('fGmax').value=''
+  $('fGps').value='all'; $('fRes').value='all'
+  renderDbList()
+}
+// v11.4: eliminar registros de la base de la app (fila a fila o los filtrados)
+function dbEliminar(lista){
+  lista.forEach(f=>{ if(db[f.serial] && db[f.serial].apps) delete db[f.serial].apps[f.seq] })
+  for(const s of Object.keys(db)) if(!Object.keys(db[s].apps||{}).length) delete db[s]
+  saveDb(); render()
+}
+$('dbList').addEventListener('click', e=>{
+  const el = e.target.closest('[data-dbdel]'); if(!el) return
+  const par = el.dataset.dbdel.split('|')
+  if(!confirm('¿Eliminar el registro #'+par[1]+' de '+par[0]+' de la base de datos de la app?')) return
+  dbEliminar([{serial:par[0], seq:par[1]}])
+  pushAlert('Registro #'+par[1]+' de '+par[0]+' eliminado de la base de la app','info')
+})
+$('fDelFiltered').onclick = ()=>{
+  const filas = dbFiltradas()
+  if(filas.length===0){ pushAlert('No hay registros que coincidan con los filtros','media'); return }
+  if(!confirm('¿Eliminar '+filas.length+' registros de la base de datos de la app?\n\n(No toca el equipo; solo la base de este navegador.)')) return
+  dbEliminar(filas)
+  pushAlert(filas.length+' registros eliminados de la base de la app','info')
 }
 $('btnExportDb').onclick = ()=>{
-  const filas = dbTodos()
-  if(filas.length===0){ pushAlert('La base de datos está vacía todavía','warn'); return }
+  const filas = dbFiltradas()
+  if(filas.length===0){ pushAlert('No hay registros para exportar (revisa los filtros)','warn'); return }
   const csv = 'equipo,seq,fecha_hora_utc,ms_equipo,gramos,pulsos,gps_fix,lat,lon,retardo_ms,resultado,sincronizado\n'+
     filas.map(f=> [f.serial,f.seq,f.tsUtc||'',f.ms,f.grams,f.pulses,f.fix?1:0,f.lat,f.lon,f.retardo,f.result,new Date(f.syncedAt||0).toISOString()].join(',')).join('\n')
   const a = document.createElement('a')
