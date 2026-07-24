@@ -328,7 +328,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-23 23:55 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-24 00:17 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -1851,14 +1851,52 @@ let appRearmeMs = 2000
 // con los eventos PERSISTIDOS en cada ESP32 (línea EVT): en vivo al dosificar
 // y por sincronización al reconectar tras trabajo sin conexión.
 let db = {}
-try{ db = JSON.parse(localStorage.getItem('dp_db')||'{}') }catch(e){}
-function saveDb(){ try{ localStorage.setItem('dp_db', JSON.stringify(db)) }catch(e){} }
+// v11.7: la base vive en IndexedDB — el almacenamiento GRANDE del navegador
+// (cientos de MB; millones de aplicaciones), en vez de localStorage (~5 MB).
+// Lo que hubiera en localStorage se migra solo la primera vez. Si el
+// navegador no tiene IndexedDB (rarísimo), se sigue usando localStorage.
+let idb = null
+try{ db = JSON.parse(localStorage.getItem('dp_db')||'{}') }catch(e){}   // arranque instantáneo / fallback
+function saveDb(){ if(idb) return; try{ localStorage.setItem('dp_db', JSON.stringify(db)) }catch(e){} }
+function idbPut(serial, rec){ if(!idb) return; try{ idb.transaction('apps','readwrite').objectStore('apps').put({serial, ...rec}) }catch(e){} }
+function idbDel(serial, seq){ if(!idb) return; try{ idb.transaction('apps','readwrite').objectStore('apps').delete([serial, Number(seq)]) }catch(e){} }
+;(function dbCargar(){
+  if(!window.indexedDB) return
+  const rq = indexedDB.open('dosapalm', 1)
+  rq.onupgradeneeded = ()=>{ rq.result.createObjectStore('apps', {keyPath:['serial','seq']}) }
+  rq.onerror = ()=>{}
+  rq.onsuccess = ()=>{
+    idb = rq.result
+    // migrar lo que hubiera en localStorage (una sola vez)
+    try{
+      const old = JSON.parse(localStorage.getItem('dp_db')||'{}')
+      for(const s of Object.keys(old)) for(const rec of Object.values(old[s].apps||{})) idbPut(s, rec)
+      localStorage.removeItem('dp_db')
+    }catch(e){}
+    // cargar TODO a memoria y repintar
+    try{
+      const cur = idb.transaction('apps','readonly').objectStore('apps').openCursor()
+      cur.onsuccess = ()=>{
+        const c = cur.result
+        if(c){
+          const r = c.value
+          const d = db[r.serial] = db[r.serial] || { apps:{} }
+          if(!d.apps[r.seq]) d.apps[r.seq] = r
+          c.continue()
+        } else {
+          try{ render() }catch(e){}
+        }
+      }
+    }catch(e){}
+  }
+})()
 function dbSerial(){ const s=$('serialTxt').textContent; return (s && s!=='—') ? s : 'EQUIPO' }
 function dbAdd(serial, seq, rec){
   const d = db[serial] = db[serial] || { apps:{} }
   if(d.apps[seq]) return false      // dedup: ya sincronizada
   d.apps[seq] = rec
-  saveDb()
+  idbPut(serial, {seq, ...rec})     // v11.7: persistencia grande (IndexedDB)
+  saveDb()                          // fallback sin IndexedDB
   return true
 }
 // v10.4: al conectar (o al terminar la operación con el botón físico), la app
@@ -2731,7 +2769,10 @@ $('fClear').onclick = ()=>{
 }
 // v11.4: eliminar registros de la base de la app (fila a fila o los filtrados)
 function dbEliminar(lista){
-  lista.forEach(f=>{ if(db[f.serial] && db[f.serial].apps) delete db[f.serial].apps[f.seq] })
+  lista.forEach(f=>{
+    if(db[f.serial] && db[f.serial].apps) delete db[f.serial].apps[f.seq]
+    idbDel(f.serial, f.seq)   // v11.7: también del almacenamiento grande
+  })
   for(const s of Object.keys(db)) if(!Object.keys(db[s].apps||{}).length) delete db[s]
   saveDb(); render()
 }
