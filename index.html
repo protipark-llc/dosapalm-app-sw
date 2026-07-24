@@ -328,7 +328,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-24 17:29 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-24 18:00 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -626,6 +626,7 @@
             <span data-jump="secTurb">&#127788; Turbina</span>
             <span data-jump="secPin">&#9881; Piñones</span>
             <span data-jump="secNube">&#9729; Nube</span>
+            <span data-jump="secRed">&#128225; Red</span>
             <span data-jump="secOta">&#11014; OTA</span>
             <span data-jump="secVista">&#128421; Vista</span>
           </div>
@@ -790,7 +791,28 @@
             <div class="fieldlabel">Clave anon (public)</div>
             <input type="text" class="pwin" id="cloudKey" autocomplete="off" spellcheck="false" style="font-size:12px"/>
             <button class="btn primary block" id="cloudSave" style="margin-top:10px">Guardar y sincronizar ahora</button>
+            <button class="btn ghost block" id="cloudLink" style="margin-top:8px">&#128279; Copiar enlace para configurar otros dispositivos</button>
             <div class="note">La app sube lo nuevo y baja lo de otros dispositivos cada minuto (y al conectar). La base local sigue funcionando sin internet; al volver la señal se ponen al día solas. La clave anon es pública por diseño — protege la tabla con las políticas RLS del script de creación.</div>
+          </div>
+
+          <!-- v12.2: red Wi-Fi compartida + escáner de equipos -->
+          <div class="card" id="secRed">
+            <div style="font-weight:700;font-size:13px">&#128225; Equipos en la red Wi-Fi</div>
+            <div class="muted" style="font-size:11.5px;margin-top:4px">Para actualizar por Wi-Fi <b>sin ir equipo por equipo</b>: conecta cada equipo UNA vez (por su AP o Bluetooth) y envíale la red compartida (router de la finca o hotspot del teléfono). Después, desde esa misma red, el escáner los lista y eliges a cuál conectarte para el OTA.</div>
+            <div class="fieldlabel">Enviar la red compartida al equipo conectado</div>
+            <div style="display:flex;gap:7px">
+              <input type="text" class="numin" id="redSsid" placeholder="Nombre de la red (SSID)" style="flex:1.2;margin:0;text-align:left"/>
+              <input type="text" class="numin" id="redPass" placeholder="Clave" style="flex:1;margin:0;text-align:left"/>
+              <button class="btn ghost" id="redSend" style="flex-shrink:0">Enviar</button>
+            </div>
+            <div class="fieldlabel" style="margin-top:12px">Buscar equipos en la red actual</div>
+            <div style="display:flex;gap:7px;align-items:center">
+              <input type="text" class="numin" id="redBase" placeholder="192.168.1" style="flex:1.2;margin:0;text-align:left"/>
+              <input type="number" class="numin" id="redPort" value="81" style="flex:.6;margin:0"/>
+              <button class="btn primary" id="redScan" style="flex-shrink:0">&#128269; Buscar</button>
+            </div>
+            <div id="redList" style="margin-top:8px"><div class="muted" style="font-size:12px">Escribe la base de la red (los tres primeros números de tu IP) y busca.</div></div>
+            <div class="note">El navegador solo permite Wi-Fi local desde la copia <b>standalone</b> (dosapalm-app.html) o http — la página https publicada lo bloquea (limitación del navegador, no de la app). El comando del equipo es <code>wifi red &lt;ssid&gt; &lt;clave&gt;</code> / <code>wifi solo</code>.</div>
           </div>
 
           <!-- v11.9: actualización del firmware por OTA desde la app -->
@@ -2869,6 +2891,20 @@ $('dbList').addEventListener('click', e=>{
 // sube/baja registros por su API REST con la clave anon (protegida por RLS).
 let cloudCfg = {url:'', key:''}
 try{ cloudCfg = JSON.parse(localStorage.getItem('dp_cloud')||'{"url":"","key":""}') }catch(e){}
+// v12.3: enlace de configuración — abrir la página con #nube=<base64> activa la
+// nube en ESTE dispositivo sin escribir nada (el enlace se genera en Config).
+try{
+  const mNube = /[#&]nube=([^&]+)/.exec(location.hash)
+  if(mNube){
+    const c = JSON.parse(atob(decodeURIComponent(mNube[1])))
+    if(c.url && c.key){
+      cloudCfg = {url:c.url, key:c.key}
+      localStorage.setItem('dp_cloud', JSON.stringify(cloudCfg))
+      history.replaceState(null, '', location.pathname + location.search)
+      setTimeout(()=> pushAlert('&#9729; Nube configurada desde el enlace: este dispositivo ya ve la base global','info'), 1500)
+    }
+  }
+}catch(e){}
 let cloudBusy = false
 function cloudOn(){ return !!(cloudCfg.url && cloudCfg.key) }
 function cloudHdrs(extra){ return Object.assign({apikey: cloudCfg.key, Authorization:'Bearer '+cloudCfg.key, 'Content-Type':'application/json'}, extra||{}) }
@@ -2914,16 +2950,125 @@ async function cloudPull(manual){
 }
 $('cloudUrl').value = cloudCfg.url; $('cloudKey').value = cloudCfg.key
 if(cloudOn()) cloudChipSet(true, 'Configurada')
+// v12.3: enlace para activar la nube en cualquier otro dispositivo
+$('cloudLink').onclick = ()=>{
+  if(!cloudOn()){ pushAlert('Primero guarda la URL y la clave de la nube','media'); return }
+  const u = 'https://protipark-llc.github.io/dosapalm-app-sw/#nube='+encodeURIComponent(btoa(JSON.stringify(cloudCfg)))
+  const fin = ()=> pushAlert('&#128279; Enlace copiado: ábrelo en cualquier dispositivo y quedará viendo la misma base global','info')
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(u).then(fin).catch(()=>{ prompt('Copia este enlace:', u) })
+  else prompt('Copia este enlace:', u)
+}
 $('cloudSave').onclick = ()=>{
   cloudCfg = {url: $('cloudUrl').value.trim(), key: $('cloudKey').value.trim()}
   try{ localStorage.setItem('dp_cloud', JSON.stringify(cloudCfg)) }catch(e){}
   if(!cloudOn()){ cloudChipSet(false, 'Sin configurar'); pushAlert('Nube desactivada (URL/clave vacías): la base queda solo local','media'); return }
   pushAlert('&#9729; Nube configurada: sincronizando...','info')
   cloudPull(true).then(()=> cloudPush())
+  cloudPullEstado(true).then(()=> cloudPushEstado())
+}
+// ---- v12.3: ESTADO COMPARTIDO — catálogos y configuración iguales en todos
+// los dispositivos (tabla dosapalm_estado, última escritura gana por fecha).
+const ESTADO_KEYS = {dose:'dp_dose', perdidas:'dp_perdidas', turbvel:'dp_turbvel', pinones:'dp_pinones', cal:'dp_cal', freq:'dp_freq'}
+let estadoTs = {}
+try{ estadoTs = JSON.parse(localStorage.getItem('dp_estadots')||'{}') }catch(e){}
+let estadoLast = {}, estadoPulled = false
+function estadoBase(){ return cloudCfg.url.replace(/\/+$/,'')+'/rest/v1/dosapalm_estado' }
+async function cloudPushEstado(){
+  if(!cloudOn() || !estadoPulled) return   // nunca pisar la nube sin haberla leído
+  const rows = []
+  for(const k of Object.keys(ESTADO_KEYS)){
+    const v = localStorage.getItem(ESTADO_KEYS[k])
+    if(v==null || estadoLast[k]===v) continue
+    rows.push({k, v, updated_at: new Date().toISOString()})
+  }
+  if(rows.length===0) return
+  try{
+    const rsp = await fetch(estadoBase()+'?on_conflict=k', {method:'POST', headers: cloudHdrs({Prefer:'resolution=merge-duplicates,return=minimal'}), body: JSON.stringify(rows)})
+    if(rsp.ok){
+      rows.forEach(r=>{ estadoLast[r.k] = r.v; estadoTs[r.k] = Date.parse(r.updated_at) })
+      try{ localStorage.setItem('dp_estadots', JSON.stringify(estadoTs)) }catch(e){}
+      log('== Nube: configuración/catálogos compartidos subidos ('+rows.length+') ==')
+    }
+  }catch(e){}
+}
+async function cloudPullEstado(alInicio){
+  if(!cloudOn()) return
+  try{
+    const rsp = await fetch(estadoBase()+'?select=*', {headers: cloudHdrs()})
+    if(!rsp.ok) return
+    let adoptados = 0
+    ;(await rsp.json()).forEach(r=>{
+      const sk = ESTADO_KEYS[r.k]; if(!sk) return
+      const ts = Date.parse(r.updated_at)||0
+      const local = localStorage.getItem(sk)
+      if(estadoLast[r.k]===undefined && local!=null) estadoLast[r.k] = local
+      if(ts > (estadoTs[r.k]||0) && r.v !== local){
+        try{ localStorage.setItem(sk, r.v) }catch(e){}
+        estadoTs[r.k] = ts; estadoLast[r.k] = r.v; adoptados++
+      } else if(estadoTs[r.k]===undefined) estadoTs[r.k] = ts
+    })
+    try{ localStorage.setItem('dp_estadots', JSON.stringify(estadoTs)) }catch(e){}
+    estadoPulled = true
+    if(adoptados>0){
+      // los datos viven en variables ya cargadas: al inicio un reload único
+      // los aplica; en caliente se avisa y aplica en la próxima recarga.
+      if(alInicio && !sessionStorage.getItem('dp_estadoreload')){
+        sessionStorage.setItem('dp_estadoreload','1')
+        location.reload()
+      } else pushAlert('&#9729; Configuración/catálogos actualizados desde la nube ('+adoptados+') — recarga la app para verlos','info')
+    } else if(alInicio) sessionStorage.removeItem('dp_estadoreload')
+  }catch(e){}
 }
 // sincronización de fondo: cada 60 s sube lo nuevo y baja lo de otros
-setInterval(()=>{ if(cloudOn()){ cloudPush(); cloudPull(false) } }, 60000)
-setTimeout(()=>{ if(cloudOn()){ cloudPull(false).then(()=> cloudPush()) } }, 4000)
+setInterval(()=>{ if(cloudOn()){ cloudPush(); cloudPull(false); cloudPullEstado(false).then(()=> cloudPushEstado()) } }, 60000)
+setTimeout(()=>{ if(cloudOn()){ cloudPull(false).then(()=> cloudPush()); cloudPullEstado(true).then(()=> cloudPushEstado()) } }, 4000)
+
+// ---------- v12.2: red compartida y escáner de equipos Wi-Fi ----------
+$('redSend').onclick = ()=>{
+  if(transport==='none'){ pushAlert('Conéctate al equipo primero (AP propio o Bluetooth)','media'); return }
+  const ss = $('redSsid').value.trim(), pw = $('redPass').value.trim()
+  if(!ss){ pushAlert('Escribe el nombre de la red (SSID, sin espacios)','media'); return }
+  if(/\s/.test(ss)){ pushAlert('El SSID no puede llevar espacios','media'); return }
+  send('wifi red '+ss+(pw?' '+pw:''))
+  pushAlert('&#128225; Red compartida enviada al equipo — cuando conecte, imprime su IP en el terminal','info')
+}
+let redScanBusy = false
+$('redScan').onclick = async ()=>{
+  if(redScanBusy) return
+  const base = $('redBase').value.trim().replace(/\.+$/,'')
+  const port = parseInt($('redPort').value,10)||81
+  if(!/^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(base)){ pushAlert('Base inválida — usa los tres primeros números de tu IP, ej. 192.168.1','media'); return }
+  redScanBusy = true
+  const found = []
+  const probe = (ip)=> new Promise(res=>{
+    let s, to
+    try{ s = new WebSocket('ws://'+ip+':'+port+'/') }catch(e){ res(); return }
+    const fin = ()=>{ clearTimeout(to); try{ s.onmessage=null; s.close() }catch(e){}; res() }
+    to = setTimeout(fin, 1600)
+    s.onopen = ()=>{ try{ s.send(cmd.clave()+'\n'); s.send('status\n') }catch(e){ fin() } }
+    s.onmessage = ev=>{ const m=/Serial: (\S+)/.exec(String(ev.data)); if(m){ if(!found.some(f=>f.serial===m[1])) found.push({serial:m[1], ip}); fin() } }
+    s.onerror = fin
+  })
+  const ips = []
+  for(let x=1; x<=254; x++) ips.push(base+'.'+x)
+  const CONC = 25
+  for(let i=0; i<ips.length; i+=CONC){
+    $('redList').innerHTML = '<div class="muted" style="font-size:12px">Escaneando '+base+'.x:'+port+' … '+Math.min(254,i)+'/254 · '+found.length+' encontrados</div>'
+    await Promise.all(ips.slice(i, i+CONC).map(probe))
+  }
+  redScanBusy = false
+  $('redList').innerHTML = found.length===0
+    ? '<div class="muted" style="font-size:12px">Ningún equipo respondió en '+base+'.1-254:'+port+'. ¿Están en esta red y en modo Wi-Fi (`conn wifi`)?</div>'
+    : found.map(f=> `<div class="row" style="font-size:12.5px;padding:6px 0;border-top:1px solid var(--line)"><span style="font-weight:700">&#128225; ${f.serial}</span><span style="display:flex;gap:8px;align-items:center"><span class="muted" style="font-size:11px">${f.ip}</span><button class="btn primary" data-redconn="${f.ip}" style="padding:5px 12px;font-size:11px">Conectar</button></span></div>`).join('')
+  pushAlert('&#128225; Escaneo terminado: '+found.length+' equipos en la red','info')
+}
+$('redList').addEventListener('click', e=>{
+  const b = e.target.closest('[data-redconn]'); if(!b) return
+  $('host').value = b.dataset.redconn
+  $('port').value = String(parseInt($('redPort').value,10)||81)
+  connect()
+  pushAlert('Conectando a '+b.dataset.redconn+' — al conectar puedes ir a OTA y enviarle el firmware','info')
+})
 
 // ---------- v11.9: actualización del firmware por OTA desde la app ----------
 // Flujo con control de flujo por eco: begin → trozos base64 (espera el eco
@@ -3268,6 +3413,7 @@ function applyProfileUi(){
   $('secNube').style.display = admin ? '' : 'none'
   $('secNubeHead').style.display = admin ? '' : 'none'
   $('secOta').style.display = admin ? '' : 'none'
+  $('secRed').style.display = admin ? '' : 'none'
   $('pwOperCard').style.display = admin ? '' : 'none'
   $('pfName').textContent = admin ? 'Administrador' : 'Operador'
   $('pfIcon').innerHTML = admin ? '&#9881;' : '&#128100;'
