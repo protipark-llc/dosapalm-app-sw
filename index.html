@@ -328,7 +328,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-24 16:23 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-24 17:14 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -2295,13 +2295,16 @@ function onLine(line){
     const pedidoPorApp = expectingStart
     expectingStart = false
     clearTimeout(startTimeout)
-    // v9.1: GUARDIÁN DE REPETICIÓN — un ciclo que la app no pidió, arrancando
-    // justo después del anterior, es casi seguro ruido: se DETIENE de inmediato.
-    if(!overlay.open && !pedidoPorApp && lastDoseEndAt && (Date.now()-lastDoseEndAt) < 6000){
-      send(cmd.parar())
-      pushAlert('⚠ CICLO REPETIDO detectado y DETENIDO automáticamente (arrancó solo tras el anterior — posible ruido con turbina alta). Revisa el rearme anti-repetición en Configuración.','alta')
-      log('!! GUARDIÁN: ciclo repetido no solicitado → parar enviado')
-      return
+    // v12.0: el viejo "guardián de repetición" (ventana FIJA de 6 s) se ELIMINÓ:
+    // mataba ciclos LEGÍTIMOS del pulsador al ritmo normal de campo (palma cada
+    // 3-5 s) y encadenaba: su propio 'parar' reiniciaba la ventana. Hoy el
+    // EQUIPO ya valida cada presión (antirebote + rearme + operación): si un
+    // ciclo arrancó, es legítimo y la app solo lo sigue. Queda un AVISO si
+    // arranca dentro del rearme configurado (no debería poder — indicaría que
+    // el rearme de la tarjeta no coincide con el de la app).
+    if(!overlay.open && !pedidoPorApp && lastDoseEndAt && (Date.now()-lastDoseEndAt) < appRearmeMs){
+      pushAlert('⚠ Ciclo del pulsador dentro de la ventana de rearme de la app ('+appRearmeMs+' ms) — revisa que el rearme de la tarjeta y el de la app coincidan (diff en Configuración)','warn')
+      log('!! Aviso: ciclo externo dentro del rearme de la app — se sigue igual (el equipo manda)')
     }
     // El progreso se abre AQUÍ, con la confirmación real del equipo — nunca antes.
     if(!overlay.open){
