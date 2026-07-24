@@ -328,7 +328,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-24 17:14 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-24 17:29 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -1865,6 +1865,9 @@ function send(c){
 // borre la cuenta regresiva del rearme (era la vía para colar ciclos falsos).
 let lastDoseEndAt = 0
 try{ lastDoseEndAt = Number(localStorage.getItem('dp_lastend'))||0 }catch(e){}
+// v12.1: fin del último ciclo en el RELOJ DEL EQUIPO ([ms] de sus líneas) —
+// medir el rearme con este reloj elimina el sesgo del retraso BLE.
+let lastEndDevMs = 0
 function marcarFinCiclo(){
   lastDoseEndAt = Date.now()
   try{ localStorage.setItem('dp_lastend', String(lastDoseEndAt)) }catch(e){}
@@ -2080,7 +2083,12 @@ function onLine(line){
       }
     }
   }
-  if(parsed.t==='doseDone' || parsed.t==='doseStopped'){ marcarFinCiclo() }
+  if(parsed.t==='doseDone' || parsed.t==='doseStopped'){
+    marcarFinCiclo()
+    // v12.1: fin del ciclo en el reloj del equipo (para medir el rearme real)
+    const mFin = /^\[(\d+)\]/.exec(line)
+    if(mFin) lastEndDevMs = Number(mFin[1])
+  }
   // v9.2: bandera de tarjeta configurada. Una tarjeta nueva/reprogramada
   // responde NO → alerta para ir a Configuración a enviarle todo.
   if(/CONFIGURADO: NO/.test(line)){
@@ -2099,6 +2107,9 @@ function onLine(line){
       clearTimeout(cfgTimeout)
       $('cfgMsg').textContent = '✓ La tarjeta confirmó: configuración aplicada.'
       pushAlert('Configuración aplicada y confirmada por la tarjeta','info')
+      // v12.1: refrescar el DIFF de inmediato — así se VE que la tarjeta quedó
+      // con los mismos datos de la app ("Coinciden ✓").
+      setTimeout(()=> pedirDatosDelEquipo(), 900)
     }
     render()
   }
@@ -2157,6 +2168,7 @@ function onLine(line){
       if(session.active) onDoseEvent(synthDoseEvent(Number(mEvt[3]), res))
       else closeOverlay()
       marcarFinCiclo()
+      lastEndDevMs = Math.max(lastEndDevMs, Number(mEvt[2]))   // v12.1: reloj del equipo
     }
     // v11.1: contar TODO lo recibido en la descarga (la confirmación es contra
     // EVT END); el ACK/purga ya NO es a ciegas — solo tras descarga completa.
@@ -2253,6 +2265,11 @@ function onLine(line){
       boardCfg.atasco = Number(mCfg[1]); boardCfg.rearme = Number(mCfg[2])
       appRearmeMs = Number(mCfg[2])   // el espejo del rearme sí es automático (seguridad)
     }
+    // v12.1: frecuencias PWM al diff (misma línea del status)
+    if((mCfg = /PWM: turb (\d+) Hz \| dosf (\d+) Hz \| tol (\d+) Hz/.exec(line))){
+      boardCfg = boardCfg || {}
+      boardCfg.fturb = Number(mCfg[1]); boardCfg.fdosf = Number(mCfg[2]); boardCfg.ftol = Number(mCfg[3])
+    }
     if((mCfg = /Pulsador: operacion (\d+) ms \| bluetooth (\d+) ms \| antirebote (\d+) ms/.exec(line))){
       boardCfg = boardCfg || {}
       boardCfg.holdOp = Number(mCfg[1]); boardCfg.holdBt = Number(mCfg[2]); boardCfg.rebote = Number(mCfg[3])
@@ -2296,15 +2313,21 @@ function onLine(line){
     expectingStart = false
     clearTimeout(startTimeout)
     // v12.0: el viejo "guardián de repetición" (ventana FIJA de 6 s) se ELIMINÓ:
-    // mataba ciclos LEGÍTIMOS del pulsador al ritmo normal de campo (palma cada
-    // 3-5 s) y encadenaba: su propio 'parar' reiniciaba la ventana. Hoy el
-    // EQUIPO ya valida cada presión (antirebote + rearme + operación): si un
-    // ciclo arrancó, es legítimo y la app solo lo sigue. Queda un AVISO si
-    // arranca dentro del rearme configurado (no debería poder — indicaría que
-    // el rearme de la tarjeta no coincide con el de la app).
-    if(!overlay.open && !pedidoPorApp && lastDoseEndAt && (Date.now()-lastDoseEndAt) < appRearmeMs){
-      pushAlert('⚠ Ciclo del pulsador dentro de la ventana de rearme de la app ('+appRearmeMs+' ms) — revisa que el rearme de la tarjeta y el de la app coincidan (diff en Configuración)','warn')
-      log('!! Aviso: ciclo externo dentro del rearme de la app — se sigue igual (el equipo manda)')
+    // mataba ciclos LEGÍTIMOS del pulsador al ritmo normal de campo. El EQUIPO
+    // valida cada presión (antirebote + rearme + operación): la app solo sigue.
+    // v12.1: el aviso de rearme desalineado se mide con el RELOJ DEL EQUIPO
+    // (los [ms] de sus líneas), no con el de la app — el retraso BLE hacía que
+    // la ventana de la app terminara DESPUÉS que la de la tarjeta y avisara en
+    // falso ante presiones perfectamente legales.
+    if(!pedidoPorApp && lastEndDevMs>0){
+      const mSt = /^\[(\d+)\]/.exec(line)
+      if(mSt){
+        const delta = Number(mSt[1]) - lastEndDevMs
+        if(delta > 0 && delta < appRearmeMs){
+          pushAlert('⚠ Rearme DESALINEADO: la tarjeta permitió este ciclo a los '+delta+' ms del fin del anterior (su reloj), pero la app espera '+appRearmeMs+' ms. Ve a Configuración → diff, fila "Rearme (ms)", y aprueba el valor correcto.','warn')
+          log('!! Rearme desalineado: tarjeta permitió a los '+delta+' ms; la app esperaba '+appRearmeMs+' ms')
+        }
+      }
     }
     // El progreso se abre AQUÍ, con la confirmación real del equipo — nunca antes.
     if(!overlay.open){
@@ -4015,6 +4038,9 @@ function diffFilas(){
     ['Pulsación operación (ms)', parseInt($('holdOpMs').value,10)||0, b.holdOp],
     ['Pulsación Bluetooth (ms)', parseInt($('holdBtMs').value,10)||0, b.holdBt],
     ['Antirebote (ms)', parseInt($('reboteMs').value,10)||0, b.rebote],
+    ['Frecuencia turbina (Hz)', parseInt($('fqTurb').value,10)||0, b.fturb],
+    ['Frecuencia dosificador (Hz)', parseInt($('fqDosf').value,10)||0, b.fdosf],
+    ['Frecuencia tolva (Hz)', parseInt($('fqTol').value,10)||0, b.ftol],
   ]
 }
 function renderCfgDiff(alertar){
