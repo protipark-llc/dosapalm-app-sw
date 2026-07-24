@@ -328,7 +328,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-24 00:17 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-24 00:25 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -625,6 +625,7 @@
             <span data-jump="secPerd">&#128167; Pérdidas</span>
             <span data-jump="secTurb">&#127788; Turbina</span>
             <span data-jump="secPin">&#9881; Piñones</span>
+            <span data-jump="secNube">&#9729; Nube</span>
             <span data-jump="secVista">&#128421; Vista</span>
           </div>
 
@@ -776,6 +777,19 @@
               <button class="btn primary" id="pnSave" style="flex-shrink:0">Guardar</button>
             </div>
             <div class="note">Guardar con un nombre existente lo actualiza. El piñón activo se elige en Dosificar.</div>
+          </div>
+
+          <!-- v11.8: base de datos GLOBAL en la nube (solo Admin) -->
+          <div class="sechead" id="secNubeHead">Nube</div>
+          <div class="card" id="secNube">
+            <div class="row"><span style="font-weight:700;font-size:13px">&#9729; Base de datos global (nube)</span><span class="chip" id="cloudChip"><span class="d"></span>—</span></div>
+            <div class="muted" style="font-size:11.5px;margin-top:4px">Con la nube activa, TODAS las aplicaciones se suben automáticamente y <b>cualquier Administrador que entre a la página publicada las ve</b>, desde cualquier dispositivo. Requiere un proyecto Supabase (gratis): pega aquí su URL y su clave <code>anon</code>.</div>
+            <div class="fieldlabel">URL del proyecto (https://xxxx.supabase.co)</div>
+            <input type="text" class="pwin" id="cloudUrl" autocomplete="off" spellcheck="false" style="font-size:12px"/>
+            <div class="fieldlabel">Clave anon (public)</div>
+            <input type="text" class="pwin" id="cloudKey" autocomplete="off" spellcheck="false" style="font-size:12px"/>
+            <button class="btn primary block" id="cloudSave" style="margin-top:10px">Guardar y sincronizar ahora</button>
+            <div class="note">La app sube lo nuevo y baja lo de otros dispositivos cada minuto (y al conectar). La base local sigue funcionando sin internet; al volver la señal se ponen al día solas. La clave anon es pública por diseño — protege la tabla con las políticas RLS del script de creación.</div>
           </div>
 
           <div class="sechead">Apariencia</div>
@@ -1897,6 +1911,8 @@ function dbAdd(serial, seq, rec){
   d.apps[seq] = rec
   idbPut(serial, {seq, ...rec})     // v11.7: persistencia grande (IndexedDB)
   saveDb()                          // fallback sin IndexedDB
+  // v11.8: lo nuevo local se sube a la base global a los pocos segundos
+  if(!rec.cloud){ clearTimeout(dbAdd._t); dbAdd._t = setTimeout(()=>{ try{ cloudPush() }catch(e){} }, 5000) }
   return true
 }
 // v10.4: al conectar (o al terminar la operación con el botón físico), la app
@@ -2785,6 +2801,67 @@ $('dbList').addEventListener('click', e=>{
   dbEliminar([{serial:par[0], seq:par[1]}])
   pushAlert('Registro #'+par[1]+' de '+par[0]+' eliminado de la base de la app','info')
 })
+// ---------- v11.8: base de datos GLOBAL en la nube (Supabase) ----------
+// La app publicada es estática: la base global vive en Supabase y la app
+// sube/baja registros por su API REST con la clave anon (protegida por RLS).
+let cloudCfg = {url:'', key:''}
+try{ cloudCfg = JSON.parse(localStorage.getItem('dp_cloud')||'{"url":"","key":""}') }catch(e){}
+let cloudBusy = false
+function cloudOn(){ return !!(cloudCfg.url && cloudCfg.key) }
+function cloudHdrs(extra){ return Object.assign({apikey: cloudCfg.key, Authorization:'Bearer '+cloudCfg.key, 'Content-Type':'application/json'}, extra||{}) }
+function cloudBase(){ return cloudCfg.url.replace(/\/+$/,'')+'/rest/v1/dosapalm_apps' }
+function cloudChipSet(ok, txt){ try{ setChip($('cloudChip'), ok, txt, ok?'g':'a') }catch(e){} }
+async function cloudPush(){
+  if(!cloudOn() || cloudBusy) return
+  const rows = []
+  for(const s of Object.keys(db)) for(const r of Object.values(db[s].apps||{})) if(!r.cloud)
+    rows.push({serial:s, seq:r.seq, ms:r.ms||0, grams:r.grams||0, pulses:r.pulses||0, fix:!!r.fix, lat:r.lat||0, lon:r.lon||0, retardo:r.retardo||0, result:r.result||'ok', ts_utc:r.tsUtc||null, synced_at:new Date(r.syncedAt||Date.now()).toISOString()})
+  if(rows.length===0) return
+  cloudBusy = true
+  try{
+    const rsp = await fetch(cloudBase()+'?on_conflict=serial,seq', {method:'POST', headers: cloudHdrs({Prefer:'resolution=merge-duplicates,return=minimal'}), body: JSON.stringify(rows)})
+    if(rsp.ok){
+      rows.forEach(w=>{ const r=(db[w.serial]||{apps:{}}).apps[w.seq]; if(r){ r.cloud=1; idbPut(w.serial, {seq:w.seq, ...r}) } })
+      log('== Nube: '+rows.length+' registros subidos a la base global ==')
+    } else log('!! Nube (subida): HTTP '+rsp.status)
+  }catch(e){ log('!! Nube (subida): '+e.message) }
+  cloudBusy = false
+}
+async function cloudPull(manual){
+  if(!cloudOn()) return
+  try{
+    const rsp = await fetch(cloudBase()+'?select=*&limit=100000', {headers: cloudHdrs()})
+    if(!rsp.ok){
+      cloudChipSet(false, 'Error HTTP '+rsp.status)
+      if(manual) pushAlert('&#9729; Nube: error HTTP '+rsp.status+' — revisa la URL, la clave anon y que la tabla exista (script SQL)','alta')
+      return
+    }
+    const rows = await rsp.json()
+    let nuevos = 0
+    rows.forEach(w=>{
+      if(dbAdd(w.serial, w.seq, {seq:w.seq, ms:w.ms, grams:w.grams, pulses:w.pulses, fix:!!w.fix, lat:w.lat, lon:w.lon, retardo:w.retardo, result:w.result, tsUtc:w.ts_utc||null, syncedAt:w.synced_at?Date.parse(w.synced_at):Date.now(), cloud:1})) nuevos++
+    })
+    cloudChipSet(true, 'Conectada · '+rows.length+' registros')
+    if(nuevos>0){ render(); pushAlert('&#9729; Base global: '+nuevos+' aplicaciones nuevas bajadas de la nube','info') }
+    else if(manual) pushAlert('&#9729; Base global al día: '+rows.length+' registros en la nube','info')
+  }catch(e){
+    cloudChipSet(false, 'Sin conexión')
+    if(manual) pushAlert('&#9729; Nube: '+e.message,'alta')
+  }
+}
+$('cloudUrl').value = cloudCfg.url; $('cloudKey').value = cloudCfg.key
+if(cloudOn()) cloudChipSet(true, 'Configurada')
+$('cloudSave').onclick = ()=>{
+  cloudCfg = {url: $('cloudUrl').value.trim(), key: $('cloudKey').value.trim()}
+  try{ localStorage.setItem('dp_cloud', JSON.stringify(cloudCfg)) }catch(e){}
+  if(!cloudOn()){ cloudChipSet(false, 'Sin configurar'); pushAlert('Nube desactivada (URL/clave vacías): la base queda solo local','media'); return }
+  pushAlert('&#9729; Nube configurada: sincronizando...','info')
+  cloudPull(true).then(()=> cloudPush())
+}
+// sincronización de fondo: cada 60 s sube lo nuevo y baja lo de otros
+setInterval(()=>{ if(cloudOn()){ cloudPush(); cloudPull(false) } }, 60000)
+setTimeout(()=>{ if(cloudOn()){ cloudPull(false).then(()=> cloudPush()) } }, 4000)
+
 $('fDelFiltered').onclick = ()=>{
   const filas = dbFiltradas()
   if(filas.length===0){ pushAlert('No hay registros que coincidan con los filtros','media'); return }
@@ -3087,6 +3164,8 @@ function applyProfileUi(){
   // dashboard global y base de datos de equipos: solo Administrador
   $('dashGlobal').style.display = admin ? '' : 'none'
   $('dbCard').style.display = admin ? '' : 'none'
+  $('secNube').style.display = admin ? '' : 'none'
+  $('secNubeHead').style.display = admin ? '' : 'none'
   $('pwOperCard').style.display = admin ? '' : 'none'
   $('pfName').textContent = admin ? 'Administrador' : 'Operador'
   $('pfIcon').innerHTML = admin ? '&#9881;' : '&#128100;'
