@@ -328,7 +328,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-24 18:00 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-24 18:15 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -2889,8 +2889,19 @@ $('dbList').addEventListener('click', e=>{
 // ---------- v11.8: base de datos GLOBAL en la nube (Supabase) ----------
 // La app publicada es estática: la base global vive en Supabase y la app
 // sube/baja registros por su API REST con la clave anon (protegida por RLS).
-let cloudCfg = {url:'', key:''}
-try{ cloudCfg = JSON.parse(localStorage.getItem('dp_cloud')||'{"url":"","key":""}') }catch(e){}
+// v12.4: la nube viene CONFIGURADA POR DEFECTO — todo dispositivo que abra la
+// app queda viendo la base global de una vez (la clave anon es pública por
+// diseño; la tabla la protegen las políticas RLS). Guardar otros datos en
+// Config → Nube los reemplaza; guardar vacío la desactiva en ese dispositivo.
+const CLOUD_DEFAULT = {
+  url: 'https://fpulvaudotrqbysvmyqr.supabase.co',
+  key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZwdWx2YXVkb3RycWJ5c3ZteXFyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4NDU0MTcsImV4cCI6MjEwMDQyMTQxN30.n4IQcqXwb_0SIlJiG6LlHRFXEWXSM5Ut7Z64VUMEjHs',
+}
+let cloudCfg = {url: CLOUD_DEFAULT.url, key: CLOUD_DEFAULT.key}
+try{
+  const st = localStorage.getItem('dp_cloud')
+  if(st){ cloudCfg = JSON.parse(st) }   // lo guardado manda (incluso vacío = desactivada)
+}catch(e){}
 // v12.3: enlace de configuración — abrir la página con #nube=<base64> activa la
 // nube en ESTE dispositivo sin escribir nada (el enlace se genera en Config).
 try{
