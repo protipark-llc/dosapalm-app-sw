@@ -331,7 +331,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-08-18 18:36 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-08-18 19:36 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -1688,20 +1688,20 @@ function dosisComando(){ return pulsosNecesarios()*2 }
 // ---------- pérdidas calibradas por seteo (turbina % + retardo ms) ----------
 // La pérdida de la manguera VARÍA con la turbina y el retardo. Se calibran en
 // Pruebas y Dosificar aplica automáticamente la del seteo activo.
-// v12.6: catálogo BASE de fábrica — 60% para las 4 velocidades (10/12/15/21
-// m/s = 20/30/71/78 %) con TODOS los retardos seleccionables. Cubre cualquier
-// combinación que el operario elija; una pérdida medida en campo lo reemplaza.
+// v12.6/v12.8: catálogo BASE de fábrica — 60% para las 4 velocidades
+// (10/12/15/21 m/s = 30/40/71/78 % de turbina) con TODOS los retardos
+// seleccionables. Una pérdida medida en campo lo reemplaza.
 let perdidas = []
-;[20,30,71,78].forEach(t=> RETARDOS.filter(v=>v>0).forEach(r=> perdidas.push({turb:t, ret:r, per:60})))
+;[30,40,71,78].forEach(t=> RETARDOS.filter(v=>v>0).forEach(r=> perdidas.push({turb:t, ret:r, per:60})))
 try{ const s=JSON.parse(localStorage.getItem('dp_perdidas')||'null'); if(Array.isArray(s)) perdidas=s }catch(e){}
 // en dispositivos con catálogo guardado, AGREGAR los faltantes de fábrica sin
 // pisar lo medido (se propaga a la flota por el estado compartido de la nube)
 {
   let faltantes = 0
-  ;[20,30,71,78].forEach(t=> RETARDOS.filter(v=>v>0).forEach(r=>{
+  ;[30,40,71,78].forEach(t=> RETARDOS.filter(v=>v>0).forEach(r=>{
     if(!perdidas.some(e=> e.turb===t && e.ret===r)){ perdidas.push({turb:t, ret:r, per:60}); faltantes++ }
   }))
-  if(faltantes>0){ try{ localStorage.setItem('dp_perdidas', JSON.stringify(perdidas)) }catch(e){} }
+  if(faltantes>0){ try{ localStorage.setItem('dp_perdidas', JSON.stringify(perdidas)); localStorage.setItem('dp_estadoforce','1') }catch(e){} }
 }
 function savePerdidas(){ try{ localStorage.setItem('dp_perdidas', JSON.stringify(perdidas)) }catch(e){} }
 function perdidaCalibrada(){ return perdidas.find(e=> e.turb===dose.turb && e.ret===dose.retardo) || null }
@@ -1712,15 +1712,27 @@ try{ const s3=JSON.parse(localStorage.getItem('dp_pinones')||'null'); if(Array.i
 function savePinones(){ try{ localStorage.setItem('dp_pinones', JSON.stringify(pinones)) }catch(e){} }
 function pinonActivo(){ return pinones.find(p=> p.name===dose.pinon) || pinones[0] }
 // velocidades de turbina calibradas: % de potencia (duty) → m/s medidos.
-// Datos de fábrica (medición de campo, 16 jul 2026):
-// (21 jul): 15 y 21 m/s visibles en Dosificar; 10 y 12 m/s ocultas (ojito).
+// Datos de fábrica. v12.8 (18 ago): 10 m/s = 30% y 12 m/s = 40%, VISIBLES —
+// las cuatro velocidades disponibles en Dosificar.
 let turbVel = [
-  { pct:20, ms:10, alt:3, hide:true },
-  { pct:30, ms:12, alt:6, hide:true },
+  { pct:30, ms:10, alt:3 },
+  { pct:40, ms:12, alt:6 },
   { pct:71, ms:15, alt:3 },
   { pct:78, ms:21, alt:6 },   // máx. recomendado
 ]
 try{ const s2=JSON.parse(localStorage.getItem('dp_turbvel')||'null'); if(Array.isArray(s2) && s2.length) turbVel=s2 }catch(e){}
+// v12.8: en dispositivos con catálogo guardado, aplicar la calibración de
+// fábrica nueva (10→30%, 12→40%, visibles) y marcar el empuje forzado a la
+// nube para que TODA la flota la reciba por la base de datos.
+{
+  let cambio = 0
+  ;[{ms:10, pct:30, alt:3}, {ms:12, pct:40, alt:6}].forEach(d=>{
+    const e = turbVel.find(x=> x.ms===d.ms)
+    if(!e){ turbVel.push({pct:d.pct, ms:d.ms, alt:d.alt}); cambio++ }
+    else if(e.pct!==d.pct || e.hide){ e.pct = d.pct; delete e.hide; cambio++ }
+  })
+  if(cambio>0){ try{ localStorage.setItem('dp_turbvel', JSON.stringify(turbVel)); localStorage.setItem('dp_estadoforce','1') }catch(e){} }
+}
 function saveTurbVel(){ try{ localStorage.setItem('dp_turbvel', JSON.stringify(turbVel)) }catch(e){} }
 // Al cambiar turbina o retardo, si hay pérdida calibrada para el seteo, se aplica.
 function syncPerdida(){
@@ -3005,18 +3017,23 @@ let estadoLast = {}, estadoPulled = false
 function estadoBase(){ return cloudCfg.url.replace(/\/+$/,'')+'/rest/v1/dosapalm_estado' }
 async function cloudPushEstado(){
   if(!cloudOn() || !estadoPulled) return   // nunca pisar la nube sin haberla leído
+  // v12.8: empuje FORZADO tras una actualización de catálogo de fábrica — la
+  // siembra local debe llegar a la nube aunque estadoLast la marque "igual".
+  const force = localStorage.getItem('dp_estadoforce')==='1'
   const rows = []
   for(const k of Object.keys(ESTADO_KEYS)){
     const v = localStorage.getItem(ESTADO_KEYS[k])
-    if(v==null || estadoLast[k]===v) continue
+    if(v==null) continue
+    if(!force && estadoLast[k]===v) continue
     rows.push({k, v, updated_at: new Date().toISOString()})
   }
-  if(rows.length===0) return
+  if(rows.length===0){ if(force) try{ localStorage.removeItem('dp_estadoforce') }catch(e){}; return }
   try{
     const rsp = await fetch(estadoBase()+'?on_conflict=k', {method:'POST', headers: cloudHdrs({Prefer:'resolution=merge-duplicates,return=minimal'}), body: JSON.stringify(rows)})
     if(rsp.ok){
       rows.forEach(r=>{ estadoLast[r.k] = r.v; estadoTs[r.k] = Date.parse(r.updated_at) })
       try{ localStorage.setItem('dp_estadots', JSON.stringify(estadoTs)) }catch(e){}
+      if(force) try{ localStorage.removeItem('dp_estadoforce') }catch(e){}
       log('== Nube: configuración/catálogos compartidos subidos ('+rows.length+') ==')
     }
   }catch(e){}
