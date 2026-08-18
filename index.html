@@ -331,7 +331,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-08-18 18:30 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-08-18 18:36 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -1856,6 +1856,13 @@ function connectBle(){
   .then(dev=> bleAttach(dev))
   .catch(e=> log('!! Bluetooth: '+e.message))
 }
+// v12.7: al recargar/cerrar la página, desconectar el BLE EXPLÍCITAMENTE —
+// sin esto el navegador puede dejar el GATT colgado y el ESP32 se queda
+// "conectado" (sin anunciar), invisible para reconectar desde esta u otra
+// página. pagehide es lo que dispara confiablemente en recarga y cierre.
+;['pagehide','beforeunload'].forEach(ev=> window.addEventListener(ev, ()=>{
+  try{ if(bleDev && bleDev.gatt && bleDev.gatt.connected) bleDev.gatt.disconnect() }catch(e){}
+}))
 // v11.1: al recargar la página el navegador SIEMPRE suelta el enlace BLE (es
 // una limitación de Web Bluetooth, no de la app). Lo que sí se puede es
 // RECONECTAR solo, sin volver a abrir el selector, usando el permiso ya
