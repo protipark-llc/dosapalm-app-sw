@@ -245,13 +245,16 @@
     body.webmode .tabbar{display:none}
     /* v11.2: la versión web usa TODA la pantalla — nada de columna angosta */
     body.webmode .scrn .body{width:100%;max-width:none;margin:0;padding:22px 34px 46px}
-    /* vistas densas: las tarjetas se reparten en una cuadrícula tipo tablero */
-    body.webmode .scrn[data-scrn="stats"] .body,
-    body.webmode .scrn[data-scrn="config"] .body,
-    body.webmode .scrn[data-scrn="pruebas"] .body{display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:0 18px;align-content:start;align-items:start}
-    body.webmode .subnav,body.webmode .sechead{grid-column:1/-1}
-    /* v11.4: el gráfico de Data ocupa TODO el ancho del tablero */
-    body.webmode #chartCard{grid-column:1/-1}
+    /* v12.6: tablero UNIFORME — las tarjetas fluyen en columnas balanceadas
+       (masonry): sin los huecos que dejaba la cuadrícula cuando una tarjeta
+       era mucho más alta que su vecina. El contenedor .colwrap (creado por
+       JS dentro del .body) tiene alto libre, así las columnas crecen hacia
+       abajo y NUNCA desbordan horizontal. Títulos de sección y el gráfico de
+       Data cortan a ancho completo con column-span. */
+    body.webmode .colwrap{column-width:420px;column-gap:18px}
+    body.webmode .colwrap > *{break-inside:avoid}
+    body.webmode .colwrap .sechead{column-span:all}
+    body.webmode .colwrap #chartCard{column-span:all}
     /* las vistas de flujo (dosificar, home...) quedan cómodas pero no angostas */
     body.webmode .scrn[data-scrn="home"] .body,
     body.webmode .scrn[data-scrn="dosificar"] .body,
@@ -328,7 +331,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-07-24 18:15 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-08-18 18:30 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -1685,12 +1688,21 @@ function dosisComando(){ return pulsosNecesarios()*2 }
 // ---------- pérdidas calibradas por seteo (turbina % + retardo ms) ----------
 // La pérdida de la manguera VARÍA con la turbina y el retardo. Se calibran en
 // Pruebas y Dosificar aplica automáticamente la del seteo activo.
-// Mediciones de campo precargadas (21 jul): 10 y 12 m/s × 500/600/700 ms → 60%.
-let perdidas = [
-  { turb:20, ret:500, per:60 }, { turb:20, ret:600, per:60 }, { turb:20, ret:700, per:60 },
-  { turb:30, ret:500, per:60 }, { turb:30, ret:600, per:60 }, { turb:30, ret:700, per:60 },
-]
+// v12.6: catálogo BASE de fábrica — 60% para las 4 velocidades (10/12/15/21
+// m/s = 20/30/71/78 %) con TODOS los retardos seleccionables. Cubre cualquier
+// combinación que el operario elija; una pérdida medida en campo lo reemplaza.
+let perdidas = []
+;[20,30,71,78].forEach(t=> RETARDOS.filter(v=>v>0).forEach(r=> perdidas.push({turb:t, ret:r, per:60})))
 try{ const s=JSON.parse(localStorage.getItem('dp_perdidas')||'null'); if(Array.isArray(s)) perdidas=s }catch(e){}
+// en dispositivos con catálogo guardado, AGREGAR los faltantes de fábrica sin
+// pisar lo medido (se propaga a la flota por el estado compartido de la nube)
+{
+  let faltantes = 0
+  ;[20,30,71,78].forEach(t=> RETARDOS.filter(v=>v>0).forEach(r=>{
+    if(!perdidas.some(e=> e.turb===t && e.ret===r)){ perdidas.push({turb:t, ret:r, per:60}); faltantes++ }
+  }))
+  if(faltantes>0){ try{ localStorage.setItem('dp_perdidas', JSON.stringify(perdidas)) }catch(e){} }
+}
 function savePerdidas(){ try{ localStorage.setItem('dp_perdidas', JSON.stringify(perdidas)) }catch(e){} }
 function perdidaCalibrada(){ return perdidas.find(e=> e.turb===dose.turb && e.ret===dose.retardo) || null }
 // Piñones dosificadores: cada uno con cantidad de cavidades y g por cavidad.
@@ -4504,6 +4516,15 @@ $('qrBack').onclick = ()=> go('dispositivos')
 renderQrList()
 
 document.body.classList.add('on-login')   // versión web: sin barra lateral hasta entrar
+
+// v12.6: envolver las tarjetas de las vistas densas en .colwrap (columnas
+// balanceadas en modo web). El submenú queda FUERA, fijo a ancho completo.
+document.querySelectorAll('.scrn[data-scrn="stats"] .body, .scrn[data-scrn="config"] .body, .scrn[data-scrn="pruebas"] .body').forEach(b=>{
+  const wrap = document.createElement('div')
+  wrap.className = 'colwrap'
+  Array.from(b.children).filter(ch=> !ch.classList.contains('subnav')).forEach(ch=> wrap.appendChild(ch))
+  b.appendChild(wrap)
+})
 
 // ---------- alternador vista web / vista móvil (solo escritorio) ----------
 function applyViewMode(){
