@@ -331,7 +331,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-08-20 21:29 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-08-20 21:58 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -2952,11 +2952,20 @@ function cloudOn(){ return !!(cloudCfg.url && cloudCfg.key) }
 function cloudHdrs(extra){ return Object.assign({apikey: cloudCfg.key, Authorization:'Bearer '+cloudCfg.key, 'Content-Type':'application/json'}, extra||{}) }
 function cloudBase(){ return cloudCfg.url.replace(/\/+$/,'')+'/rest/v1/dosapalm_apps' }
 function cloudChipSet(ok, txt){ try{ setChip($('cloudChip'), ok, txt, ok?'g':'a') }catch(e){} }
+// v13.8: fila para la nube con SANEO — un valor corrupto (fecha malformada de
+// una linea BLE truncada, numero inválido...) hacia fallar la subida COMPLETA
+// con HTTP 400 en bucle eterno.
+function cloudFila(s, r){
+  const num = (v)=> (typeof v==='number' && isFinite(v)) ? v : 0
+  let ts = null
+  if(r.tsUtc){ const d = new Date(r.tsUtc); if(!isNaN(d)) ts = d.toISOString() }
+  return {serial:String(s), seq:num(r.seq), ms:num(r.ms), grams:num(r.grams), pulses:num(r.pulses), fix:!!r.fix, lat:num(r.lat), lon:num(r.lon), retardo:num(r.retardo), result:String(r.result||'ok').slice(0,20), ts_utc:ts, synced_at:new Date(num(r.syncedAt)||Date.now()).toISOString()}
+}
 async function cloudPush(){
   if(!cloudOn() || cloudBusy) return
   const rows = []
-  for(const s of Object.keys(db)) for(const r of Object.values(db[s].apps||{})) if(!r.cloud)
-    rows.push({serial:s, seq:r.seq, ms:r.ms||0, grams:r.grams||0, pulses:r.pulses||0, fix:!!r.fix, lat:r.lat||0, lon:r.lon||0, retardo:r.retardo||0, result:r.result||'ok', ts_utc:r.tsUtc||null, synced_at:new Date(r.syncedAt||Date.now()).toISOString()})
+  for(const s of Object.keys(db)) for(const r of Object.values(db[s].apps||{})) if(!r.cloud && !r.cloudErr)
+    rows.push(cloudFila(s, r))
   if(rows.length===0) return
   cloudBusy = true
   try{
@@ -2964,7 +2973,23 @@ async function cloudPush(){
     if(rsp.ok){
       rows.forEach(w=>{ const r=(db[w.serial]||{apps:{}}).apps[w.seq]; if(r){ r.cloud=1; idbPut(w.serial, {seq:w.seq, ...r}) } })
       log('== Nube: '+rows.length+' registros subidos a la base global ==')
-    } else log('!! Nube (subida): HTTP '+rsp.status)
+    } else {
+      const detalle = (await rsp.text()).slice(0, 180)
+      log('!! Nube (subida): HTTP '+rsp.status+' — '+detalle)
+      // v13.8: AISLAR el registro envenenado — reintentar de a uno; el que
+      // falle queda marcado (cloudErr) y deja de bloquear a los demas.
+      if(rsp.status===400 && rows.length>1){
+        let malos = 0
+        for(const w of rows){
+          const r1 = await fetch(cloudBase()+'?on_conflict=serial,seq', {method:'POST', headers: cloudHdrs({Prefer:'resolution=merge-duplicates,return=minimal'}), body: JSON.stringify([w])})
+          const r = (db[w.serial]||{apps:{}}).apps[w.seq]
+          if(!r) continue
+          if(r1.ok){ r.cloud = 1 } else { r.cloudErr = 1; malos++; log('!! Nube: registro '+w.serial+' #'+w.seq+' RECHAZADO ('+r1.status+') — aislado para no bloquear la subida') }
+          idbPut(w.serial, {seq:w.seq, ...r})
+        }
+        if(malos>0) pushAlert('&#9729; Nube: '+malos+' registro(s) con datos corruptos quedaron aislados (el resto ya sube normal) — revísalos en Data','warn')
+      }
+    }
   }catch(e){ log('!! Nube (subida): '+e.message) }
   cloudBusy = false
 }
