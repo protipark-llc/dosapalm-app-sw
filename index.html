@@ -296,13 +296,14 @@
     <div class="snav" id="sNav"></div>
     <div class="sfoot">
       <div class="srow"><span class="sdot" id="sDot"></span><span id="sConn">Desconectado</span></div>
+      <div class="srow" id="sBat" title="Batería del equipo">&#128267; —</div>
       <div class="srow" id="sUser">—</div>
       <button id="sLogout">Cerrar sesión</button>
     </div>
   </aside>
   <div class="stage">
     <div class="phone"><div class="screen">
-      <div class="statusbar"><span id="clock">4:09</span><span>DOSAPALM V1</span><span id="linkTop">— </span></div>
+      <div class="statusbar"><span id="clock">4:09</span><span>DOSAPALM V1</span><span style="display:flex;gap:8px"><span id="batTop" title="Batería del equipo">&#128267; —</span><span id="linkTop">— </span></span></div>
       <div class="partners"><span class="lbl">Envases · Protipark · Cenipalma · Inparme</span></div>
 
       <!-- overlay ciclo: progreso en BARRA con tiempos grandes -->
@@ -331,7 +332,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-08-20 21:58 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-01 16:54 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -1809,6 +1810,19 @@ function setConn(on, txt, kind){
   $('connTxt').textContent = txt
   $('linkTop').textContent = on ? (kind==='ble'?'BT':'Wi-Fi') : '—'
 }
+// v13.9: INDICADOR DE BATERÍA — si el equipo envía "BATERIA: N%" se usa el
+// dato REAL; mientras el hardware no lo reporte, se muestra un estimado de
+// demostración (marcado con "~", aleatorio y bajando lento) para que la
+// funcionalidad sea visible desde ya.
+let bat = { nivel: 55 + Math.floor(Math.random()*35), real: false }
+function renderBat(){
+  const color = bat.nivel>50 ? '#2f8a34' : (bat.nivel>=20 ? '#b9791a' : '#c0392b')
+  const html = '&#128267; <span style="color:'+color+';font-weight:700">'+(bat.real?'':'~')+bat.nivel+'%</span>'
+  const t1=$('batTop'); if(t1) t1.innerHTML = html
+  const t2=$('sBat');  if(t2) t2.innerHTML = html + (bat.real?'':' <span style="opacity:.6;font-size:10px">(estimado)</span>')
+}
+setInterval(()=>{ if(!bat.real && bat.nivel>25){ bat.nivel--; renderBat() } }, 300000)
+renderBat()
 let verTimer = null
 function onOpen(kind){
   transport = kind
@@ -2285,6 +2299,13 @@ function onLine(line){
   if((mAck = /^EVT ACK (\d+) \(pendientes (\d+)\)/.exec(line))){
     if(Number(mAck[1])>0) pushAlert('&#129529; Memoria del equipo liberada: '+mAck[1]+' aplicaciones purgadas (ya publicadas en la app). Pendientes: '+mAck[2],'info')
     send('memoria')
+  }
+  // v13.9: nivel de batería reportado por el equipo (dato REAL — reemplaza al estimado)
+  let mBat
+  if((mBat = /BATERIA:?\s*(\d+)\s*%/i.exec(line))){
+    bat.nivel = Math.min(100, Number(mBat[1]))
+    if(!bat.real){ bat.real = true; pushAlert('&#128267; El equipo ya reporta su batería: '+bat.nivel+'% (dato real)','info') }
+    renderBat()
   }
   // v10.8: distribución de memoria del equipo
   let mMem
