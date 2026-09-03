@@ -332,7 +332,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-03 20:57 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-03 21:36 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -742,6 +742,13 @@
               <button class="btn ghost" id="rearmeApply">Aplicar</button>
             </div>
             <div class="note">Tras cada ciclo, el equipo <b>ignora todo nuevo arranque</b> (pulsador incluido) durante este tiempo — evita aplicaciones falsas por ruido con la turbina a alta potencia. Queda guardado en la tarjeta; 0 lo desactiva (no recomendado).</div>
+            <div style="display:flex;gap:7px;align-items:center;margin-top:10px">
+              <span style="font-size:12px;flex-shrink:0">Rampa turbina</span>
+              <input type="number" id="rampaMs" class="numin" value="2000" min="200" max="20000" step="100" style="flex:1"/>
+              <span class="muted" style="font-size:11px">ms</span>
+              <button class="btn ghost" id="rampaApply">Aplicar</button>
+            </div>
+            <div class="note">Tiempo que tarda la turbina en ir de 0 al 100 % de potencia (y de 100 a 0) — arranque y frenado suaves y controlados. Ej.: 4000 ms = 4 s hasta plena potencia. Queda guardado en la tarjeta.</div>
             <div id="calResults" style="margin-top:8px"></div>
             <div class="note">La calibración mueve <b>únicamente el motor dosificador</b> — turbina y tolva apagadas. <b>Arranca siempre al 90% de duty</b> (fuerza de sobra para despegar) y el lazo converge bajando hacia el duty real del retardo durante el tiempo de medición elegido. <b>Usar</b> aplica ese retardo como configuración de trabajo de la máquina.</div>
           </div>
@@ -1164,6 +1171,8 @@ var DosapalmProtocol = (() => {
      * bloqueo). Con la turbina a tope, el ruido puede relanzar ciclos falsos.
      */
     rearme: (ms) => `rearme ${Math.max(0, Math.round(ms))}`,
+    /** v14.2: rampa de la turbina (ms de 0 a 100 %). */
+    rampa: (ms) => `rampa ${Math.min(2e4, Math.max(200, Math.round(ms)))}`,
     /** v8.4: frecuencia PWM por motor (100–40000 Hz, persistente en el equipo). */
     freq: (motor, hz) => `freq ${motor} ${Math.min(4e4, Math.max(100, Math.round(hz)))}`,
     tini: (ms) => `tini ${Math.max(0, Math.round(ms))}`,
@@ -1877,6 +1886,9 @@ function bleAttach(dev){
     dev.addEventListener('gattserverdisconnected',()=>{
       if(transport==='ble'){ transport='none'; bleRx=null; setConn(false,'Desconectado') }
       log('== Bluetooth desconectado ==')
+      // v14.1: una descarga en curso NO se reanuda sola al reconectar (evita el
+      // bucle descarga→caída→reconexión→descarga); el usuario la retoma con un toque
+      try{ dlAuto = 0; expectedPend = 0; clearTimeout(pendDlTimer) }catch(e){}
       if(bleVoluntario) return
       if(bleReintentos >= 3){ pushAlert('&#128246; El Bluetooth se cayó y no se pudo reconectar — toca el botón Bluetooth','alta'); bleReintentos = 0; return }
       bleReintentos++
@@ -2065,36 +2077,52 @@ function intentarAckParcial(){
   if(X>=lo){ send(cmd.evtAck(X)); return X }
   return 0
 }
+// v14.1: purga parcial de UNA página — mayor prefijo contiguo presente en la
+// base entre (máx recibido − enviados + 1) y el máx recibido.
+function intentarAckParcialPagina(enviados){
+  if(syncMaxSeq<=0 || enviados<=0) return 0
+  const have = new Set(Object.keys((db[dbSerial()]||{}).apps||{}).map(Number))
+  const hi = syncMaxSeq, lo = Math.max(1, hi - enviados + 1)
+  let X = 0
+  for(let s=lo; s<=hi; s++){ if(have.has(s)) X = s; else break }
+  if(X>=lo){ send(cmd.evtAck(X)); syncMaxSeq = 0; return X }
+  return 0
+}
+// v14.1: plan B por inactividad — el cierre de la página no llegó (línea
+// perdida): asegurar lo recibido y pedir la página de nuevo.
 function finDescarga(enviados){
   clearTimeout(pendDlTimer)
   if(expectedPend<=0) return
-  const meta = (enviados!=null) ? enviados : expectedPend
-  if(meta>0 && evtRecvCount >= meta){
-    pushAlert('✓ Descarga confirmada: '+evtRecvCount+' aplicaciones recibidas completas — ordenando limpieza de la memoria del equipo','info')
-    if(syncMaxSeq>0){ send(cmd.evtAck(syncMaxSeq)); syncMaxSeq = 0 }
-    dlAuto = 0
-  } else if(meta>0){
-    const X = intentarAckParcial()
-    if(X>0){
-      pushAlert('&#9203; Descarga parcial: llegaron '+evtRecvCount+' de '+meta+' — aseguradas y purgadas hasta la #'+X+'; el resto se reintenta automáticamente','warn')
-    } else {
-      pushAlert('⚠ Descarga INCOMPLETA: llegaron '+evtRecvCount+' de '+meta+' — se reintenta automáticamente (la memoria del equipo NO se toca)','warn')
-    }
-    lastEvtPullAt = 0   // el próximo sondeo dispara el reintento
+  if(dlPageRecv>0){
+    const X = intentarAckParcialPagina(dlPageRecv)
+    log('!! Página sin cierre (EVT END perdido): '+dlPageRecv+' recibidas'+(X>0?', aseguradas hasta #'+X:'')+' — reintentando')
+    dlTotal += (X>0 ? dlPageRecv : 0)
   }
-  evtRecvCount = 0; expectedPend = 0; syncMaxSeq = 0
+  if(dlAuto>0){ dlAuto--; setTimeout(pedirPagina, 1200) }
+  else { pushAlert('⚠ Descarga interrumpida (sin respuesta del equipo) — vuelve a tocar Descargar','warn'); expectedPend = 0; evtRecvCount = 0 }
+}
+// v14.1: DESCARGA POR PÁGINAS de 40 eventos — cada página se confirma y se
+// PURGA antes de pedir la siguiente (siempre `evt since 0 40`, porque lo
+// anterior ya no está). Ninguna ráfaga supera 40 líneas (el BLE aguanta) y
+// si el enlace se cae a mitad, lo ya confirmado quedó a salvo.
+const DL_PAGINA = 40
+let dlPageRecv = 0, dlTotal = 0, dlPageCerrada = false
+function pedirPagina(){
+  if(transport==='none') return
+  dlPageRecv = 0; syncMaxSeq = 0; dlPageCerrada = false
+  lastEvtPullAt = Date.now()
+  send('evt since 0 '+DL_PAGINA)
+  clearTimeout(pendDlTimer)
+  pendDlTimer = setTimeout(()=> finDescarga(null), 10000)
 }
 function descargarPendientes(n, esReintento){
   if(transport==='none'){ pushAlert('El equipo se desconectó: reconéctate para descargar','media'); return }
   if(!esReintento) dlAuto = 8   // una confirmación del usuario autoriza los reintentos
-  lastEvtPullAt = Date.now()
   expectedPend = n
   evtRecvCount = 0
-  syncMaxSeq = 0
-  log('!! Descarga '+(esReintento?'(reintento automático)':'CONFIRMADA por el usuario')+': sincronizando '+n+' aplicaciones...')
-  send('evt since 0')
-  clearTimeout(pendDlTimer)
-  pendDlTimer = setTimeout(()=> finDescarga(null), 10000)
+  dlTotal = 0
+  log('!! Descarga '+(esReintento?'(reintento automático)':'CONFIRMADA por el usuario')+': '+n+' aplicaciones en páginas de '+DL_PAGINA+'...')
+  pedirPagina()
 }
 $('pendGo').onclick = ()=>{
   const n = Number($('pendBanner').dataset.n||0)
@@ -2262,6 +2290,7 @@ function onLine(line){
     // v11.1: contar TODO lo recibido en la descarga (la confirmación es contra
     // EVT END); el ACK/purga ya NO es a ciegas — solo tras descarga completa.
     evtRecvCount++
+    dlPageRecv++   // v14.1: conteo de la página en curso
     syncMaxSeq = Math.max(syncMaxSeq, Number(mEvt[1]))
     // v11.6: mientras siguen llegando eventos, el plan B espera (inactividad
     // de 8 s, no tiempo absoluto) — con cientos de aplicaciones la ráfaga
@@ -2283,8 +2312,28 @@ function onLine(line){
   // v11.1/v11.6: fin de la descarga — CONFIRMAR antes de ordenar la limpieza.
   // Solo con una descarga EN CURSO (expectedPend>0): el equipo repite EVT END
   // contra pérdidas BLE y el duplicado debe ignorarse.
-  if((mEvt = /^EVT END (\d+)/.exec(line)) && expectedPend>0){
-    finDescarga(Number(mEvt[1]))
+  if((mEvt = /^EVT END (\d+)(?:\s+(\d+))?/.exec(line)) && expectedPend>0 && !dlPageCerrada){
+    dlPageCerrada = true   // v14.1: el equipo repite EVT END (anti-pérdida): el duplicado se ignora
+    const enviados = Number(mEvt[1]), restantes = mEvt[2]!=null ? Number(mEvt[2]) : 0
+    clearTimeout(pendDlTimer)
+    if(enviados>0 && dlPageRecv >= enviados){
+      // página completa → purgar YA lo recibido y seguir con la siguiente
+      if(syncMaxSeq>0){ send(cmd.evtAck(syncMaxSeq)); syncMaxSeq = 0 }
+      dlTotal += dlPageRecv
+      if(restantes>0){
+        log('!! Página confirmada ('+dlTotal+' de ~'+expectedPend+') — pidiendo la siguiente ('+restantes+' restantes)')
+        setTimeout(pedirPagina, 400)
+      } else {
+        pushAlert('✓ Descarga confirmada: '+dlTotal+' aplicaciones recibidas y memoria del equipo liberada','info')
+        dlAuto = 0; expectedPend = 0; evtRecvCount = 0
+      }
+    } else if(enviados>0){
+      // página incompleta (líneas perdidas): asegurar el prefijo y reintentar
+      const X = intentarAckParcialPagina(enviados)
+      log('!! Página incompleta: '+dlPageRecv+' de '+enviados+(X>0?' — aseguradas hasta #'+X:'')+' — reintentando')
+      if(dlAuto>0){ dlAuto--; setTimeout(pedirPagina, 1200) }
+      else { pushAlert('⚠ Descarga interrumpida por pérdidas Bluetooth — vuelve a tocar Descargar','warn'); expectedPend = 0 }
+    } else { dlAuto = 0; expectedPend = 0 }   // nada que descargar
   }
   // v11.1: la tarjeta confirmó el borrado total de su configuración
   if(/FABRICA OK/.test(line)){
@@ -2363,6 +2412,8 @@ function onLine(line){
       boardCfg.atasco = Number(mCfg[1]); boardCfg.rearme = Number(mCfg[2])
       appRearmeMs = Number(mCfg[2])   // el espejo del rearme sí es automático (seguridad)
     }
+    // v14.2: rampa de la turbina (misma línea del status; ausente en firmware viejo)
+    if((mCfg = /\| rampa (\d+) ms/.exec(line))){ boardCfg = boardCfg || {}; boardCfg.rampa = Number(mCfg[1]) }
     // v12.1: frecuencias PWM al diff (misma línea del status)
     if((mCfg = /PWM: turb (\d+) Hz \| dosf (\d+) Hz \| tol (\d+) Hz/.exec(line))){
       boardCfg = boardCfg || {}
@@ -4233,6 +4284,14 @@ $('fqApply').onclick = ()=>{
 let fqPending = null
 
 // guardián de atasco configurable (v8.3, persistente en la tarjeta)
+// v14.2: rampa de aceleración/frenado de la turbina (ms de 0 a 100 %)
+$('rampaApply').onclick = ()=>{
+  if(transport==='none'){ calMsg('⚠ Conecta el equipo primero.'); return }
+  const ms = Math.min(20000, Math.max(200, parseInt($('rampaMs').value||'2000',10)||2000))
+  $('rampaMs').value = ms
+  send('rampa '+ms)
+  pushAlert('Rampa de la turbina: '+ms+' ms (0→100 %)','info')
+}
 $('atascoApply').onclick = ()=>{
   if(transport==='none'){ calMsg('⚠ Conecta el equipo primero.'); return }
   // v13.7: mínimo físico 1500 ms — con menos, el paro es inevitable (el piñón
@@ -4253,6 +4312,7 @@ $('btnSendCfg').onclick = ()=>{
   send(cmd.motor('turb', dose.turb))
   send(cmd.atasco(Math.max(500, parseInt($('atascoMs').value||'5000',10))))
   send(cmd.rearme(Math.max(0, parseInt($('rearmeMs').value||'2000',10)||0)))
+  send('rampa '+Math.min(20000, Math.max(200, parseInt($('rampaMs').value||'2000',10)||2000)))   // v14.2
   send(cmd.freq('turb', pwmFreq.turb)); send(cmd.freq('dosf', pwmFreq.dosf)); send(cmd.freq('tol', pwmFreq.tol))
   // v9.4: pulsaciones sostenidas del botón físico
   send(cmd.holdOp(Math.max(1000, parseInt($('holdOpMs').value||'5000',10))))
@@ -4311,6 +4371,7 @@ function diffFilas(){
     ['PWM fijo (%)', dose.dutyFijo||0, b.dutyFijo],
     ['Atasco (ms)', parseInt($('atascoMs').value,10)||0, b.atasco],
     ['Rearme (ms)', parseInt($('rearmeMs').value,10)||0, b.rearme],
+    ['Rampa turbina (ms)', parseInt($('rampaMs').value,10)||0, b.rampa],
     ['Pulsación operación (ms)', parseInt($('holdOpMs').value,10)||0, b.holdOp],
     ['Pulsación Bluetooth (ms)', parseInt($('holdBtMs').value,10)||0, b.holdBt],
     ['Antirebote (ms)', parseInt($('reboteMs').value,10)||0, b.rebote],
@@ -4347,6 +4408,7 @@ $('btnDiffAdopt').onclick = ()=>{
   dose.dosis = Math.max(0, Math.round(Math.round(b.gMaq/2) * gcavG() * (1 - perdidaPct()/100)))
   if(b.atasco!=null) $('atascoMs').value = b.atasco
   if(b.rearme!=null){ $('rearmeMs').value = b.rearme; appRearmeMs = b.rearme }
+  if(b.rampa!=null) $('rampaMs').value = b.rampa
   if(b.holdOp!=null) $('holdOpMs').value = b.holdOp
   if(b.holdBt!=null) $('holdBtMs').value = b.holdBt
   if(b.rebote!=null) $('reboteMs').value = b.rebote
@@ -4495,7 +4557,7 @@ function btnGuardando(btn, opts){
     setTimeout(()=>{ btn.classList.remove('savedok'); btn.innerHTML = orig; delete btn.dataset.saving }, 1000)
   }, opts.ms||900)
 }
-;[['holdOpApply',1],['holdBtApply',1],['reboteApply',1],['atascoApply',1],['rearmeApply',1],['fqApply',1],['monApply',1],['btnDiffPush',1],['btnSendCfg',1],['pdSave',0],['tvSave',0],['pnSave',0]].forEach(par=>{
+;[['holdOpApply',1],['holdBtApply',1],['reboteApply',1],['atascoApply',1],['rearmeApply',1],['rampaApply',1],['fqApply',1],['monApply',1],['btnDiffPush',1],['btnSendCfg',1],['pdSave',0],['tvSave',0],['pnSave',0]].forEach(par=>{
   const b = $(par[0]); if(!b) return
   b.addEventListener('click', ()=> btnGuardando(b, {device: !!par[1], ms: (par[0]==='btnSendCfg'||par[0]==='btnDiffPush') ? 1800 : 900}))
 })
