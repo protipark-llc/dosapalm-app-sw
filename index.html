@@ -332,7 +332,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-03 21:36 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-03 21:52 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -499,6 +499,7 @@
             <div class="row"><span style="font-weight:700;font-size:13px">&#128229; Datos sin descargar del equipo</span><span class="chip a"><span class="d"></span><span id="pendCardN">0</span></span></div>
             <div class="muted" style="font-size:12px;margin:6px 0 10px" id="pendCardTxt"></div>
             <button class="btn primary block" id="pendCardGo">Descargar ahora</button>
+            <button class="btn ghost block" id="pendCardBorrar" style="margin-top:8px;color:var(--red);border-color:var(--red)">&#128465; Borrar del equipo sin descargar</button>
           </div>
           <div class="sysgrid">
             <div class="sysbox"><div class="k">Aplicaciones</div><div class="v" style="color:var(--orange);font-size:22px" id="stApps">0</div></div>
@@ -1064,6 +1065,7 @@
           <button class="btn ghost" id="pendLater" style="flex:1">Más tarde</button>
           <button class="btn primary" id="pendGo" style="flex:1">Descargar ahora</button>
         </div>
+        <button class="btn ghost block" id="pendBorrar" style="margin-top:8px;color:var(--red);border-color:var(--red);font-size:12px">&#128465; Borrar del equipo sin descargar</button>
       </div>
     </div></div>
   </div>
@@ -2130,6 +2132,21 @@ $('pendGo').onclick = ()=>{
   descargarPendientes(n)
 }
 $('pendCardGo').onclick = ()=> descargarPendientes(pendCount)
+// v14.3: BORRAR los pendientes del equipo SIN descargarlos (pruebas de banco,
+// datos que no valen). Purga total con el comando de ack existente en TODAS las
+// versiones del firmware (seq tope) — no requiere flashear. Irreversible.
+function borrarPendientesEquipo(){
+  if(transport==='none'){ pushAlert('Conéctate al equipo primero','media'); return }
+  const n = pendCount || Number($('pendBanner').dataset.n||0)
+  if(!confirm('¿Eliminar '+n+' aplicaciones de la MEMORIA DEL EQUIPO sin guardarlas en la base de datos?\n\nEsto NO se puede deshacer: esos registros se pierden para siempre.')) return
+  ocultarPendBanner()
+  dlAuto = 0; expectedPend = 0; clearTimeout(pendDlTimer)
+  send(cmd.evtAck(2147483647))   // purga todo (cualquier seq ≤ tope)
+  send('memoria')
+  pushAlert('&#128465; Orden enviada: borrando '+n+' aplicaciones de la memoria del equipo (sin guardarlas)','warn')
+}
+$('pendBorrar').onclick = borrarPendientesEquipo
+$('pendCardBorrar').onclick = borrarPendientesEquipo
 $('pendLater').onclick = ()=>{
   ocultarPendBanner()
   pendSnoozeUntil = Date.now() + 5*60000
@@ -2368,7 +2385,7 @@ function onLine(line){
   // v10.8: confirmación de purga — la memoria del equipo quedó libre
   let mAck
   if((mAck = /^EVT ACK (\d+) \(pendientes (\d+)\)/.exec(line))){
-    if(Number(mAck[1])>0) pushAlert('&#129529; Memoria del equipo liberada: '+mAck[1]+' aplicaciones purgadas (ya publicadas en la app). Pendientes: '+mAck[2],'info')
+    if(Number(mAck[1])>0) pushAlert('&#129529; Memoria del equipo liberada: '+mAck[1]+' aplicaciones purgadas. Pendientes: '+mAck[2],'info')
     send('memoria')
   }
   // v13.9: nivel de batería reportado por el equipo (dato REAL — reemplaza al estimado)
