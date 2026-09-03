@@ -332,7 +332,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-01 16:54 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-03 20:57 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -1864,9 +1864,31 @@ function connect(){
 }
 // v11.1: enganche BLE reutilizable — lo usan el botón (con selector) y la
 // RECONEXIÓN automática tras recargar la página (sin selector).
+// v14.0: RECONEXIÓN AUTOMÁTICA — si el enlace BLE se cae sin que el usuario lo
+// pidiera (ráfaga GATT, microcorte de radio/alimentación al arrancar un motor),
+// la app reintenta sola con el mismo dispositivo (sin selector): 3 intentos con
+// espera creciente. Solo se rinde si el cierre fue voluntario (salir/recargar).
+let bleVoluntario = false, bleReintentos = 0
 function bleAttach(dev){
   bleDev = dev
-  dev.addEventListener('gattserverdisconnected',()=>{ if(transport==='ble'){ transport='none'; bleRx=null; setConn(false,'Desconectado') } log('== Bluetooth desconectado ==') })
+  bleVoluntario = false
+  if(!dev._dpHooked){
+    dev._dpHooked = true
+    dev.addEventListener('gattserverdisconnected',()=>{
+      if(transport==='ble'){ transport='none'; bleRx=null; setConn(false,'Desconectado') }
+      log('== Bluetooth desconectado ==')
+      if(bleVoluntario) return
+      if(bleReintentos >= 3){ pushAlert('&#128246; El Bluetooth se cayó y no se pudo reconectar — toca el botón Bluetooth','alta'); bleReintentos = 0; return }
+      bleReintentos++
+      const espera = 1500 * bleReintentos
+      pushAlert('&#128246; Bluetooth caído — reconectando automáticamente ('+bleReintentos+'/3)…','media')
+      setTimeout(()=>{
+        if(transport!=='none' || bleVoluntario) return
+        bleAttach(dev).then(()=>{ bleReintentos = 0; pushAlert('&#128246; Bluetooth reconectado','info') })
+                      .catch(e=> log('!! Reconexión BLE: '+e.message))
+      }, espera)
+    })
+  }
   return dev.gatt.connect()
   .then(sv=> sv.getPrimaryService(NUS))
   .then(svc=> Promise.all([svc.getCharacteristic(NUS_RX), svc.getCharacteristic(NUS_TX)]))
@@ -1887,7 +1909,7 @@ function connectBle(){
 // "conectado" (sin anunciar), invisible para reconectar desde esta u otra
 // página. pagehide es lo que dispara confiablemente en recarga y cierre.
 ;['pagehide','beforeunload'].forEach(ev=> window.addEventListener(ev, ()=>{
-  try{ if(bleDev && bleDev.gatt && bleDev.gatt.connected) bleDev.gatt.disconnect() }catch(e){}
+  try{ bleVoluntario = true; if(bleDev && bleDev.gatt && bleDev.gatt.connected) bleDev.gatt.disconnect() }catch(e){}
 }))
 // v11.1: al recargar la página el navegador SIEMPRE suelta el enlace BLE (es
 // una limitación de Web Bluetooth, no de la app). Lo que sí se puede es
@@ -2224,7 +2246,7 @@ function onLine(line){
       fix:mEvt[5]==='1', lat:Number(mEvt[6]), lon:Number(mEvt[7]), retardo:Number(mEvt[11]),
       result:mEvt[12], syncedAt:Date.now(),
       // v11.0: hora UTC del GPS de la tarjeta (null si no había señal/campo)
-      tsUtc:(mEvt[13] && mEvt[13]!=='-') ? mEvt[13] : null,
+      tsUtc: tsSano(mEvt[13]),   // v14.0: fechas basura del GPS sin fix (2080-01-06) → null
     })
     // v9.7: el EVT es la confirmación AUTORITATIVA del equipo. Si la línea de
     // "completado" se perdió (overlay aún abierto), el EVT cierra el ciclo con
@@ -2319,7 +2341,9 @@ function onLine(line){
   if(/SD: respaldo activado|SD: microSD montada/.test(line)){ $('sdSw').classList.add('on') }
   else if(/SD: respaldo desactivado/.test(line)){ $('sdSw').classList.remove('on') }
   // v9.4: estado de operación reportado por el equipo (app y tarjeta en sincronía)
-  if(/OPERACION: ACTIVA \(/.test(line)){ setOperacionApp(true, true); pedirDatosDelEquipo() }
+  // v14.0: el refresco del diff se pide 1,5 s DESPUÉS — antes se sumaba a la
+  // ráfaga (ACTIVA + su repetición) y congestionaba el BLE al iniciar operación.
+  if(/OPERACION: ACTIVA \(/.test(line)){ setOperacionApp(true, true); setTimeout(()=>{ if(transport!=='none') pedirDatosDelEquipo() }, 1500) }
   else if(/OPERACION: ACTIVA$/.test(line.replace(/^\[\d+\] /,''))){ setOperacionApp(true, true) }
   else if(/OPERACION: DETENIDA/.test(line)){
     setOperacionApp(false, true)
@@ -2850,7 +2874,17 @@ function dbTodos(){
   return filas
 }
 // v11.0: hora local de la aplicación desde la hora UTC del GPS de la tarjeta
+// v14.0: una fecha del equipo solo vale si es plausible (2024-2045): el GPS sin
+// fix entrega "2080-01-06T00:00:37Z" y ensuciaba la base y el dashboard.
+function tsSano(s){
+  if(!s || s==='-') return null
+  const d = new Date(s)
+  if(isNaN(d)) return null
+  const y = d.getUTCFullYear()
+  return (y>=2024 && y<=2045) ? d.toISOString() : null
+}
 function horaEv(f){
+  f = Object.assign({}, f, {tsUtc: tsSano(f.tsUtc)})
   if(f.tsUtc){
     const d = new Date(f.tsUtc)
     if(!isNaN(d)) return d.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})+' · '+d.toLocaleDateString('es-CO',{day:'2-digit',month:'2-digit'})
@@ -2979,7 +3013,7 @@ function cloudChipSet(ok, txt){ try{ setChip($('cloudChip'), ok, txt, ok?'g':'a'
 function cloudFila(s, r){
   const num = (v)=> (typeof v==='number' && isFinite(v)) ? v : 0
   let ts = null
-  if(r.tsUtc){ const d = new Date(r.tsUtc); if(!isNaN(d)) ts = d.toISOString() }
+  ts = tsSano(r.tsUtc)
   return {serial:String(s), seq:num(r.seq), ms:num(r.ms), grams:num(r.grams), pulses:num(r.pulses), fix:!!r.fix, lat:num(r.lat), lon:num(r.lon), retardo:num(r.retardo), result:String(r.result||'ok').slice(0,20), ts_utc:ts, synced_at:new Date(num(r.syncedAt)||Date.now()).toISOString()}
 }
 async function cloudPush(){
@@ -3026,7 +3060,7 @@ async function cloudPull(manual){
     const rows = await rsp.json()
     let nuevos = 0
     rows.forEach(w=>{
-      if(dbAdd(w.serial, w.seq, {seq:w.seq, ms:w.ms, grams:w.grams, pulses:w.pulses, fix:!!w.fix, lat:w.lat, lon:w.lon, retardo:w.retardo, result:w.result, tsUtc:w.ts_utc||null, syncedAt:w.synced_at?Date.parse(w.synced_at):Date.now(), cloud:1})) nuevos++
+      if(dbAdd(w.serial, w.seq, {seq:w.seq, ms:w.ms, grams:w.grams, pulses:w.pulses, fix:!!w.fix, lat:w.lat, lon:w.lon, retardo:w.retardo, result:w.result, tsUtc:tsSano(w.ts_utc), syncedAt:w.synced_at?Date.parse(w.synced_at):Date.now(), cloud:1})) nuevos++
     })
     cloudChipSet(true, 'Conectada · '+rows.length+' registros')
     if(nuevos>0){ render(); pushAlert('&#9729; Base global: '+nuevos+' aplicaciones nuevas bajadas de la nube','info') }
@@ -3558,6 +3592,7 @@ $('btnPwOperSave').onclick = ()=>{
 // v10.5: cerrar sesión también DESCONECTA el equipo (Bluetooth o Wi-Fi).
 function cerrarSesionApp(){
   try{
+    bleVoluntario = true   // v14.0: cierre pedido por el usuario — sin reconexión automática
     if(transport==='ble' && bleDev && bleDev.gatt && bleDev.gatt.connected){ bleDev.gatt.disconnect() }
     if(ws){ try{ ws.close() }catch(e){} ws = null }
   }catch(e){}
