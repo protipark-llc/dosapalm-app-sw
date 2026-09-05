@@ -332,7 +332,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-05 20:17 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-05 20:32 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -1021,6 +1021,7 @@
             <div style="display:flex;gap:7px;margin-top:8px">
               <button class="btn primary" id="autoStart" style="flex:1">&#9654; Iniciar</button>
               <button class="btn red" id="autoStop" style="flex:1;display:none">&#9632; Detener</button>
+              <button class="btn ghost" id="autoReset" style="flex:.7" title="Poner contadores y progreso en cero (si está corriendo, reinicia la corrida desde cero)">&#8635; Reiniciar</button>
             </div>
             <div class="note">Aplica el perfil al equipo y ejecuta <b>ciclos reales</b> uno tras otro: por cantidad o hasta cumplir el tiempo (termina el ciclo en curso). Requiere la tarjeta configurada; si la operación no está activa, la activa. La pausa se suma al rearme del equipo. Cada ciclo queda registrado como una aplicación normal (base de datos y nube).</div>
           </div>
@@ -4088,6 +4089,28 @@ $('autoStop').onclick = ()=>{
   if(!auto) return
   if(auto.esperando) send(cmd.parar())
   autoFin('detenido por el usuario','warn')
+}
+// v14.6: REINICIAR — sin corrida: contadores, barra y mensaje a cero. Con
+// corrida en curso: detiene el ciclo actual y vuelve a empezar la MISMA
+// corrida desde cero (mismo perfil, cantidad/tiempo y pausa).
+$('autoReset').onclick = ()=>{
+  if(auto){
+    if(!confirm('¿Reiniciar la corrida desde cero? Se detiene el ciclo en curso y vuelve a empezar con la misma configuración.')) return
+    const cfg = { modo: auto.modo, n: auto.n, min: Math.max(1, Math.round((auto.hasta-auto.t0)/60000)), pausaMs: auto.pausaMs }
+    if(auto.esperando) send(cmd.parar())
+    clearTimeout(auto.wd); clearTimeout(auto.tm); auto = null
+    autoUltimoFinError = false
+    auto = { modo: cfg.modo, n: cfg.n, hasta: Date.now()+cfg.min*60000, pausaMs: cfg.pausaMs, hechos:0, err:0, gramos:0, t0: Date.now(), esperando:false, pausaHasta:0, wd:null, tm:null }
+    autoUI(); $('autoMsg').textContent = 'Reiniciando la corrida desde cero…'
+    log('!! Ciclos automáticos: reinicio desde cero')
+    auto.tm = setTimeout(autoSiguiente, 2500)   // deja cerrar el ciclo parado + rearme
+    return
+  }
+  autoUltimoFinError = false
+  $('autoBar').style.width = '0%'
+  $('autoMsg').textContent = 'Listo.'
+  setChip($('autoChip'), false, '—', '')
+  pushAlert('&#8635; Ciclos automáticos: contadores y progreso en cero','info')
 }
 setInterval(()=>{ if(auto) autoUI() }, 1000)
 renderPerfiles()
