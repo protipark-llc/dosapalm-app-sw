@@ -332,7 +332,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-03 21:52 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-05 19:33 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -419,6 +419,19 @@
           <input type="number" class="numin" id="inPerdida" min="0" max="90" step="5" value="60"/>
           <div class="hint" id="perdidaNote" style="margin-top:2px"></div>
           <div class="hint" id="doseHint"></div>
+          <!-- v14.4: PERFILES de dosificación — guardar/aplicar la pantalla completa -->
+          <div class="card" id="perfCard" style="padding:10px 12px">
+            <div class="row"><span style="font-weight:700;font-size:13px">&#128193; Perfiles de dosificación</span><span class="muted" id="perfActivo" style="font-size:10.5px">sin perfil</span></div>
+            <div style="display:flex;gap:7px;margin-top:8px;align-items:center">
+              <select class="numin" id="perfSel" style="flex:1;margin:0;text-align:left"></select>
+              <button class="btn primary" id="perfAplicar" style="flex-shrink:0">Aplicar</button>
+            </div>
+            <div style="display:flex;gap:7px;margin-top:7px">
+              <button class="btn ghost" id="perfGuardar" style="flex:1">&#128190; Guardar la pantalla actual como perfil</button>
+              <button class="btn ghost" id="perfBorrar" style="flex:.55;color:var(--red);border-color:var(--red)">Eliminar</button>
+            </div>
+            <div class="note">Un perfil guarda TODO lo de esta pantalla (dosis, turbina, tiempos, retardo, PWM fijo, pérdida, piñón). <b>Aplicar</b> lo carga aquí y, si el equipo está conectado, se lo envía. Los perfiles se comparten con toda la flota por la nube.</div>
+          </div>
           <!-- Todos los parámetros editables (misma vista para Admin y Operador) -->
           <div id="advFields">
             <div style="display:flex;gap:10px">
@@ -987,6 +1000,28 @@
               <button class="btn ghost" data-pcmd="gps raw 5">NMEA 5s</button>
             </div>
             <div class="note">La respuesta aparece en el terminal de abajo y actualiza el chip de GPS.</div>
+          </div>
+
+          <!-- v14.4: corredor automático de ciclos con un perfil -->
+          <div class="sechead">Ciclos automáticos</div>
+          <div class="card" id="prAuto">
+            <div class="row"><span style="font-weight:700;font-size:13px">&#128257; Correr ciclos con un perfil</span><span class="chip" id="autoChip"><span class="d"></span>—</span></div>
+            <div class="fieldlabel">Perfil de dosificación</div>
+            <select class="numin" id="autoPerf" style="text-align:left"></select>
+            <div class="muted" id="autoPerfInfo" style="font-size:11px;margin-top:4px">—</div>
+            <div class="seg" id="autoModo" style="margin-top:10px"><div data-m="n" class="on">Por cantidad de ciclos</div><div data-m="t">Por tiempo</div></div>
+            <div style="display:flex;gap:7px;margin-top:8px;align-items:flex-end">
+              <div style="flex:1" id="autoNWrap"><div class="muted" style="font-size:10px;text-align:center;margin-bottom:3px">Ciclos</div><input type="number" class="numin" id="autoN" value="10" min="1" max="1000" style="margin:0"/></div>
+              <div style="flex:1;display:none" id="autoMinWrap"><div class="muted" style="font-size:10px;text-align:center;margin-bottom:3px">Minutos</div><input type="number" class="numin" id="autoMin" value="10" min="1" max="600" style="margin:0"/></div>
+              <div style="flex:1"><div class="muted" style="font-size:10px;text-align:center;margin-bottom:3px">Pausa entre ciclos (s)</div><input type="number" class="numin" id="autoPausa" value="5" min="0" max="600" style="margin:0"/></div>
+            </div>
+            <div style="height:12px;background:#eef1f5;border-radius:99px;overflow:hidden;margin-top:10px"><div id="autoBar" style="height:100%;width:0%;background:var(--orange);border-radius:99px;transition:width .3s"></div></div>
+            <div class="muted" id="autoMsg" style="font-size:11.5px;margin-top:5px">Listo.</div>
+            <div style="display:flex;gap:7px;margin-top:8px">
+              <button class="btn primary" id="autoStart" style="flex:1">&#9654; Iniciar</button>
+              <button class="btn red" id="autoStop" style="flex:1;display:none">&#9632; Detener</button>
+            </div>
+            <div class="note">Aplica el perfil al equipo y ejecuta <b>ciclos reales</b> uno tras otro: por cantidad o hasta cumplir el tiempo (termina el ciclo en curso). Requiere la tarjeta configurada; si la operación no está activa, la activa. La pausa se suma al rearme del equipo. Cada ciclo queda registrado como una aplicación normal (base de datos y nube).</div>
           </div>
 
           <div class="sechead">Monitor y consola</div>
@@ -1974,6 +2009,8 @@ let lastEndDevMs = 0
 function marcarFinCiclo(){
   lastDoseEndAt = Date.now()
   try{ localStorage.setItem('dp_lastend', String(lastDoseEndAt)) }catch(e){}
+  // v14.4: el corredor automático avanza al siguiente ciclo tras la pausa
+  try{ if(typeof autoCicloTermino==='function') autoCicloTermino() }catch(e){}
 }
 let expectingStart = false // true solo cuando la app misma pidió dosificar
 let startTimeout = null    // aviso si el equipo no confirma el arranque
@@ -2218,6 +2255,7 @@ function onLine(line){
     }
   }
   if(parsed.t==='doseDone' || parsed.t==='doseStopped'){
+    autoUltimoFinError = (parsed.t==='doseStopped')   // v14.4: un ciclo parado cuenta como error en el corredor
     marcarFinCiclo()
     // v12.1: fin del ciclo en el reloj del equipo (para medir el rearme real)
     const mFin = /^\[(\d+)\]/.exec(line)
@@ -2317,6 +2355,7 @@ function onLine(line){
       pendDlTimer = setTimeout(()=> finDescarga(null), 8000)
     }
     if(nuevo){
+      if(auto && (Date.now()-auto.t0) < 6*3600000) auto.gramos += Number(mEvt[3])||0   // v14.4: gramos del corredor
       syncNewCount++
       clearTimeout(syncNewTimer)
       syncNewTimer = setTimeout(()=>{
@@ -3158,7 +3197,7 @@ $('cloudSave').onclick = ()=>{
 }
 // ---- v12.3: ESTADO COMPARTIDO — catálogos y configuración iguales en todos
 // los dispositivos (tabla dosapalm_estado, última escritura gana por fecha).
-const ESTADO_KEYS = {dose:'dp_dose', perdidas:'dp_perdidas', turbvel:'dp_turbvel', pinones:'dp_pinones', cal:'dp_cal', freq:'dp_freq'}
+const ESTADO_KEYS = {dose:'dp_dose', perdidas:'dp_perdidas', turbvel:'dp_turbvel', pinones:'dp_pinones', cal:'dp_cal', freq:'dp_freq', perfiles:'dp_perfiles'}
 let estadoTs = {}
 try{ estadoTs = JSON.parse(localStorage.getItem('dp_estadots')||'{}') }catch(e){}
 let estadoLast = {}, estadoPulled = false
@@ -3894,6 +3933,151 @@ function liveApply(){
   if(transport==='none') return
   for(const c of arguments) send(c)
 }
+
+// ---------- v14.4: PERFILES de dosificación ----------
+// Un perfil = foto de la pantalla Dosificar. Se guardan en dp_perfiles (y se
+// comparten por el estado de la nube). Aplicar = cargar en pantalla + enviar.
+let perfiles = []
+try{ const sp=JSON.parse(localStorage.getItem('dp_perfiles')||'null'); if(Array.isArray(sp)) perfiles=sp }catch(e){}
+let perfilActivo = localStorage.getItem('dp_perfilactivo') || ''
+function savePerfiles(){ try{ localStorage.setItem('dp_perfiles', JSON.stringify(perfiles)) }catch(e){} }
+function perfilSnapshot(){
+  return { dosis:dose.dosis, turb:dose.turb, tini:dose.tini, tfin:dose.tfin, retardo:dose.retardo, dutyFijo:dose.dutyFijo, perdida:dose.perdida, pinon:dose.pinon||null }
+}
+function perfilResumen(p){
+  const d=p.dose; const tv = turbVel.find(t=>t.pct===d.turb)
+  return d.dosis+' g · turbina '+d.turb+'%'+(tv?' ('+tv.ms+' m/s)':'')+' · retardo '+d.retardo+' ms · '+d.tini+'/'+d.tfin+' ms · PWM '+(d.dutyFijo||0)+'% · pérdida '+d.perdida+'%'
+}
+function renderPerfiles(){
+  const opts = perfiles.length ? perfiles.map(p=>`<option value="${p.id}">${p.name}</option>`).join('') : '<option value="">(sin perfiles — guarda uno)</option>'
+  ;['perfSel','autoPerf'].forEach(id=>{ const s=$(id); if(!s) return; const v=s.value; s.innerHTML=opts; if(perfiles.some(p=>p.id===v)) s.value=v })
+  const act = perfiles.find(p=>p.id===perfilActivo)
+  $('perfActivo').textContent = act ? 'activo: '+act.name : 'sin perfil'
+  if(act && $('perfSel')) $('perfSel').value = act.id
+  const ap = perfiles.find(p=>p.id===$('autoPerf').value)
+  $('autoPerfInfo').textContent = ap ? perfilResumen(ap) : '—'
+}
+function aplicarPerfil(p, enviar){
+  Object.assign(dose, {dosis:p.dose.dosis, turb:p.dose.turb, tini:p.dose.tini, tfin:p.dose.tfin, retardo:p.dose.retardo, dutyFijo:p.dose.dutyFijo, perdida:p.dose.perdida})
+  if(p.dose.pinon) dose.pinon = p.dose.pinon
+  perfilActivo = p.id; try{ localStorage.setItem('dp_perfilactivo', p.id) }catch(e){}
+  saveDose(); renderRetardoOptions(); render(); renderPerfiles()
+  if(enviar && transport!=='none'){
+    send(cmd.modo('real')); send(cmd.motor('turb', dose.turb))
+    send(cmd.tini(dose.tini)); send(cmd.tfin(dose.tfin)); send(cmd.dosis(dosisComando()))
+    send(cmd.retardo(dose.retardo)); send(cmd.dutyFijo(dose.dutyFijo||0))
+  }
+}
+$('perfAplicar').onclick = ()=>{
+  const p = perfiles.find(x=>x.id===$('perfSel').value)
+  if(!p){ pushAlert('No hay perfil seleccionado — guarda uno primero','media'); return }
+  aplicarPerfil(p, true)
+  pushAlert('&#128193; Perfil "'+p.name+'" aplicado'+(transport!=='none'?' y enviado al equipo':''),'info')
+}
+$('perfGuardar').onclick = ()=>{
+  const cur = perfiles.find(x=>x.id===perfilActivo)
+  const name = prompt('Nombre del perfil:', cur ? cur.name : 'Perfil '+(perfiles.length+1))
+  if(!name || !name.trim()) return
+  const n = name.trim()
+  let p = perfiles.find(x=>x.name.toLowerCase()===n.toLowerCase())
+  if(p){ if(!confirm('Ya existe "'+p.name+'". ¿Reemplazarlo con la pantalla actual?')) return; p.dose = perfilSnapshot(); p.updatedAt = Date.now() }
+  else { p = {id: 'pf'+Date.now().toString(36), name:n, dose: perfilSnapshot(), createdAt: Date.now()}; perfiles.push(p) }
+  perfilActivo = p.id; try{ localStorage.setItem('dp_perfilactivo', p.id) }catch(e){}
+  savePerfiles(); renderPerfiles()
+  pushAlert('&#128190; Perfil "'+p.name+'" guardado','info')
+}
+$('perfBorrar').onclick = ()=>{
+  const p = perfiles.find(x=>x.id===$('perfSel').value)
+  if(!p) return
+  if(!confirm('¿Eliminar el perfil "'+p.name+'"?')) return
+  perfiles = perfiles.filter(x=>x.id!==p.id)
+  if(perfilActivo===p.id){ perfilActivo=''; try{ localStorage.removeItem('dp_perfilactivo') }catch(e){} }
+  savePerfiles(); renderPerfiles()
+}
+$('autoPerf').addEventListener('change', renderPerfiles)
+
+// ---------- v14.4: CORREDOR AUTOMÁTICO de ciclos (Pruebas) ----------
+// Toma un perfil, lo aplica al equipo y encadena ciclos REALES: por cantidad
+// o por tiempo. Avanza cuando el equipo cierra cada ciclo (marcarFinCiclo),
+// respeta el rearme + la pausa, y se detiene ante fallos repetidos.
+let auto = null
+let autoModoSel = 'n'
+let autoUltimoFinError = false
+$('autoModo').addEventListener('click', e=>{
+  const d = e.target.closest('[data-m]'); if(!d) return
+  autoModoSel = d.dataset.m
+  document.querySelectorAll('#autoModo div').forEach(x=> x.classList.toggle('on', x.dataset.m===autoModoSel))
+  $('autoNWrap').style.display = autoModoSel==='n' ? '' : 'none'
+  $('autoMinWrap').style.display = autoModoSel==='t' ? '' : 'none'
+})
+function autoUI(){
+  const on = !!auto
+  $('autoStart').style.display = on ? 'none' : ''
+  $('autoStop').style.display = on ? '' : 'none'
+  if(!on){ setChip($('autoChip'), false, '—', ''); return }
+  let pct = 0, meta = ''
+  if(auto.modo==='n'){ pct = Math.round(auto.hechos/auto.n*100); meta = 'ciclo '+Math.min(auto.hechos+1, auto.n)+' de '+auto.n }
+  else { const tot = auto.hasta-auto.t0, el = Math.min(tot, Date.now()-auto.t0); pct = Math.round(el/tot*100); meta = Math.ceil((auto.hasta-Date.now())/60000)+' min restantes' }
+  $('autoBar').style.width = pct+'%'
+  $('autoMsg').textContent = (auto.esperando ? 'Ciclo en curso — ' : (auto.pausaHasta && Date.now()<auto.pausaHasta ? 'Pausa/rearme — ' : ''))+meta+' · hechos '+auto.hechos+' · errores '+auto.err+' · '+auto.gramos+' g'
+  setChip($('autoChip'), true, 'Corriendo '+pct+'%', 'g')
+}
+function autoFin(motivo, sev){
+  const a = auto; auto = null
+  clearTimeout(a && a.wd); clearTimeout(a && a.tm)
+  autoUI()
+  $('autoMsg').textContent = motivo+' — '+a.hechos+' ciclos, '+a.err+' errores, '+a.gramos+' g en '+Math.round((Date.now()-a.t0)/1000)+' s'
+  pushAlert('&#128257; Ciclos automáticos: '+motivo+' ('+a.hechos+' ciclos, '+a.gramos+' g)', sev||'info')
+}
+function autoSiguiente(){
+  if(!auto) return
+  if(transport==='none'){ autoFin('detenido: equipo desconectado','alta'); return }
+  if(auto.modo==='n' ? auto.hechos>=auto.n : Date.now()>=auto.hasta){ autoFin('completado ✓'); return }
+  if(overlay.open){ auto.tm = setTimeout(autoSiguiente, 500); return }   // el ciclo anterior aún cierra
+  const rest = rearmeRestante()
+  if(rest>0){ auto.pausaHasta = Date.now()+rest; autoUI(); auto.tm = setTimeout(autoSiguiente, rest+200); return }
+  if(auto.pausaHasta && Date.now()<auto.pausaHasta){ auto.tm = setTimeout(autoSiguiente, auto.pausaHasta-Date.now()+50); return }
+  auto.esperando = true; autoUI()
+  ejecutar()
+  if(!expectingStart){   // ejecutar() se negó (sin config / sin operación / rearme)
+    auto.esperando = false; auto.err++
+    if(auto.err - auto.hechos >= 3 || auto.err>=5){ autoFin('detenido: el equipo rechazó el arranque varias veces (revisa configuración/operación)','alta'); return }
+    auto.tm = setTimeout(autoSiguiente, 3000); return
+  }
+  clearTimeout(auto.wd)
+  auto.wd = setTimeout(()=>{ if(auto && auto.esperando){ auto.esperando=false; auto.err++; log('!! Ciclo automático sin cierre en 60 s — se cuenta como error'); autoSiguiente() } }, 60000)
+}
+function autoCicloTermino(){
+  if(!auto || !auto.esperando) return
+  auto.esperando = false; clearTimeout(auto.wd)
+  if(autoUltimoFinError){ auto.err++; autoUltimoFinError = false; if(auto.err>=3 && auto.hechos===0){ autoFin('detenido: 3 ciclos seguidos con error','alta'); return } }
+  else auto.hechos++
+  auto.pausaHasta = Date.now() + auto.pausaMs
+  autoUI()
+  auto.tm = setTimeout(autoSiguiente, auto.pausaMs + 100)
+}
+$('autoStart').onclick = ()=>{
+  if(transport==='none'){ pushAlert('Conéctate al equipo primero','media'); return }
+  const p = perfiles.find(x=>x.id===$('autoPerf').value)
+  if(!p){ pushAlert('Elige un perfil (créalo en Dosificar → Perfiles)','media'); return }
+  if(boardConfigured===false){ pushAlert('La tarjeta está SIN CONFIGURAR — envíale la configuración primero','alta'); return }
+  const n = Math.max(1, parseInt($('autoN').value,10)||1), min = Math.max(1, parseInt($('autoMin').value,10)||1)
+  const pausaMs = Math.max(0, parseInt($('autoPausa').value,10)||0)*1000
+  if(!confirm('Correr ciclos REALES con el perfil "'+p.name+'"\n'+(autoModoSel==='n' ? n+' ciclos' : min+' minutos')+', pausa '+(pausaMs/1000)+' s entre ciclos.\n\nEl equipo va a dosificar de verdad. ¿Continuar?')) return
+  aplicarPerfil(p, true)
+  if(!session.active) setOperacionApp(true)
+  auto = { modo: autoModoSel, n, hasta: Date.now()+min*60000, pausaMs, hechos:0, err:0, gramos:0, t0: Date.now(), esperando:false, pausaHasta:0, wd:null, tm:null }
+  autoUI()
+  log('!! Ciclos automáticos: perfil "'+p.name+'" — '+(autoModoSel==='n' ? n+' ciclos' : min+' min'))
+  auto.tm = setTimeout(autoSiguiente, 1500)   // deja aplicar perfil/operación
+}
+$('autoStop').onclick = ()=>{
+  if(!auto) return
+  if(auto.esperando) send(cmd.parar())
+  autoFin('detenido por el usuario','warn')
+}
+setInterval(()=>{ if(auto) autoUI() }, 1000)
+renderPerfiles()
 $('btnDosificar').onclick = ejecutar
 // v10.1: guardar la configuración de Dosificar EN el equipo (persistente):
 // vale para todos los ciclos del operario, botón físico incluido.
