@@ -332,7 +332,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-05 19:33 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-05 20:17 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -401,6 +401,20 @@
           </div>
         </div>
         <div class="body">
+          <!-- v14.4/v14.5: PERFILES de dosificación — comunes a las vistas Pro y Sencilla -->
+          <div class="card" id="perfCard" style="padding:10px 12px">
+            <div class="row"><span style="font-weight:700;font-size:13px">&#128193; Perfiles de dosificación</span><span class="muted" id="perfActivo" style="font-size:10.5px">sin perfil</span></div>
+            <div style="display:flex;gap:7px;margin-top:8px;align-items:center">
+              <select class="numin" id="perfSel" style="flex:1;margin:0;text-align:left"></select>
+              <button class="btn primary" id="perfAplicar" style="flex-shrink:0">Aplicar</button>
+            </div>
+            <div style="display:flex;gap:7px;margin-top:7px">
+              <button class="btn ghost" id="perfGuardar" style="flex:1.4">&#128190; Guardar actual como perfil</button>
+              <button class="btn ghost" id="perfRenombrar" style="flex:.8">&#9998; Renombrar</button>
+              <button class="btn ghost" id="perfBorrar" style="flex:.6;color:var(--red);border-color:var(--red)">Eliminar</button>
+            </div>
+            <div class="note">Un perfil guarda TODO lo de esta pantalla (dosis, turbina, tiempos, retardo, PWM fijo, pérdida, piñón). <b>Aplicar</b> lo carga aquí y, si el equipo está conectado, se lo envía. Se comparten con toda la flota por la nube.</div>
+          </div>
           <!-- VISTA SENCILLA (dummie): cards grandes e iguales; se activa en Configuración -->
           <div id="dumFields" style="display:none">
             <div class="dgrid">
@@ -419,19 +433,6 @@
           <input type="number" class="numin" id="inPerdida" min="0" max="90" step="5" value="60"/>
           <div class="hint" id="perdidaNote" style="margin-top:2px"></div>
           <div class="hint" id="doseHint"></div>
-          <!-- v14.4: PERFILES de dosificación — guardar/aplicar la pantalla completa -->
-          <div class="card" id="perfCard" style="padding:10px 12px">
-            <div class="row"><span style="font-weight:700;font-size:13px">&#128193; Perfiles de dosificación</span><span class="muted" id="perfActivo" style="font-size:10.5px">sin perfil</span></div>
-            <div style="display:flex;gap:7px;margin-top:8px;align-items:center">
-              <select class="numin" id="perfSel" style="flex:1;margin:0;text-align:left"></select>
-              <button class="btn primary" id="perfAplicar" style="flex-shrink:0">Aplicar</button>
-            </div>
-            <div style="display:flex;gap:7px;margin-top:7px">
-              <button class="btn ghost" id="perfGuardar" style="flex:1">&#128190; Guardar la pantalla actual como perfil</button>
-              <button class="btn ghost" id="perfBorrar" style="flex:.55;color:var(--red);border-color:var(--red)">Eliminar</button>
-            </div>
-            <div class="note">Un perfil guarda TODO lo de esta pantalla (dosis, turbina, tiempos, retardo, PWM fijo, pérdida, piñón). <b>Aplicar</b> lo carga aquí y, si el equipo está conectado, se lo envía. Los perfiles se comparten con toda la flota por la nube.</div>
-          </div>
           <!-- Todos los parámetros editables (misma vista para Admin y Operador) -->
           <div id="advFields">
             <div style="display:flex;gap:10px">
@@ -3993,6 +3994,18 @@ $('perfBorrar').onclick = ()=>{
   perfiles = perfiles.filter(x=>x.id!==p.id)
   if(perfilActivo===p.id){ perfilActivo=''; try{ localStorage.removeItem('dp_perfilactivo') }catch(e){} }
   savePerfiles(); renderPerfiles()
+}
+// v14.5: renombrar el perfil seleccionado
+$('perfRenombrar').onclick = ()=>{
+  const p = perfiles.find(x=>x.id===$('perfSel').value)
+  if(!p){ pushAlert('Selecciona un perfil para renombrar','media'); return }
+  const name = prompt('Nuevo nombre para "'+p.name+'":', p.name)
+  if(!name || !name.trim() || name.trim()===p.name) return
+  const n = name.trim()
+  if(perfiles.some(x=>x.id!==p.id && x.name.toLowerCase()===n.toLowerCase())){ pushAlert('Ya existe un perfil llamado "'+n+'"','media'); return }
+  const viejo = p.name; p.name = n; p.updatedAt = Date.now()
+  savePerfiles(); renderPerfiles()
+  pushAlert('&#9998; Perfil "'+viejo+'" renombrado a "'+n+'"','info')
 }
 $('autoPerf').addEventListener('change', renderPerfiles)
 
