@@ -332,7 +332,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-06 00:35 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-06 01:13 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -1945,6 +1945,8 @@ function bleAttach(dev){
   .then(sv=> sv.getPrimaryService(NUS))
   .then(svc=> Promise.all([svc.getCharacteristic(NUS_RX), svc.getCharacteristic(NUS_TX)]))
   .then(cs=>{ bleRx=cs[0]; const tx=cs[1]
+    bleSinRespuesta = !!(bleRx.properties && bleRx.properties.writeWithoutResponse)   // v14.9
+    log('== BLE: escritura '+(bleSinRespuesta ? 'SIN respuesta (rápida)' : 'con respuesta')+' ==')
     tx.addEventListener('characteristicvaluechanged',(e)=>{ for(const line of asm.push(new TextDecoder().decode(e.target.value))) onLine(line) })
     return tx.startNotifications() })
   .then(()=>{ if(bleDev.name) setSerial(bleDev.name); onOpen('ble') })
@@ -1987,18 +1989,36 @@ function bleReconectar(){
 // ("GATT operation already in progress"): al dosificar, la app envía 6 comandos
 // seguidos y sin cola las escrituras chocan y se PIERDEN comandos en el equipo.
 let bleQueue = Promise.resolve()
-function bleWrite(data){
-  const enc = new TextEncoder().encode(data)
+// v14.9: (a) escritura SIN respuesta cuando la característica lo permite — la
+// escritura "con respuesta" espera el ACK del equipo y en Android, con la
+// tarjeta notificando LOG/MON/status, cada una tardaba ~3 s; la cola crecía
+// (turb 35 → 2 s, turb 49 → 8 s...) hasta que Android agotó su límite de 30 s
+// por operación GATT y SOLTÓ el enlace ("GATT operation failed for unknown
+// reason"). (b) tiempo límite de 2,5 s por escritura: la cola nunca se queda
+// colgada detrás de una operación muerta. (c) "último valor gana": los sliders
+// de motor (turb/dosf/tol) reemplazan al comando anterior aún no enviado.
+const bleCoalesce = {}
+let bleSinRespuesta = false
+function bleWrite(data, key){
+  if(key) bleCoalesce[key] = data
   bleQueue = bleQueue.then(async ()=>{
+    if(key){ if(bleCoalesce[key]===undefined) return; data = bleCoalesce[key]; delete bleCoalesce[key] }
+    const enc = new TextEncoder().encode(data)
     for(let i=0; i<enc.length; i+=20){
       if(!bleRx) return
-      await bleRx.writeValue(enc.slice(i, i+20))
+      const trozo = enc.slice(i, i+20)
+      const op = (bleSinRespuesta && bleRx.writeValueWithoutResponse) ? bleRx.writeValueWithoutResponse(trozo) : bleRx.writeValue(trozo)
+      const res = await Promise.race([op.then(()=>'ok'), new Promise(r=>setTimeout(()=>r('timeout'), 2500))])
+      if(res==='timeout'){ log('!! BLE: escritura sin respuesta en 2,5 s — se continúa con la cola'); return }
     }
   }).catch(e=>{ log('!! BLE: '+e.message) })
 }
 function send(c){
   if(transport==='ws' && ws && ws.readyState===1){ ws.send(c+'\n'); log('>> '+c) }
-  else if(transport==='ble' && bleRx){ bleWrite(c+'\n'); log('>> '+c) }
+  else if(transport==='ble' && bleRx){
+    const mm = /^(turb|dosf|tol) \d+$/.exec(c)
+    bleWrite(c+'\n', mm ? 'motor:'+mm[1] : null); log('>> '+c)
+  }
 }
 
 // ---------- ingesta de líneas ----------
@@ -2454,8 +2474,13 @@ function onLine(line){
   if(/OPERACION: ACTIVA \(/.test(line)){ setOperacionApp(true, true); setTimeout(()=>{ if(transport!=='none') pedirDatosDelEquipo() }, 1500) }
   else if(/OPERACION: ACTIVA$/.test(line.replace(/^\[\d+\] /,''))){ setOperacionApp(true, true) }
   else if(/OPERACION: DETENIDA/.test(line)){
+    // v14.9: el sondeo `operacion` de cada 10 s responde DETENIDA siempre que no
+    // hay operación — antes cada respuesta pedía un `status` completo (15
+    // líneas) y ese tráfico de vuelta congestionaba el BLE. Solo se refresca si
+    // la app creía que la operación estaba ACTIVA (cierre real).
+    const eraActiva = session.active
     setOperacionApp(false, true)
-    pedirDatosDelEquipo()   // v10.4: al cerrar la operación, refrescar lo guardado
+    if(eraActiva) pedirDatosDelEquipo()   // v10.4: al cerrar la operación, refrescar lo guardado
   }
   // v10.9: los datos guardados del equipo se RECOLECTAN para el DIFF —
   // ya no se adoptan solos: el admin aprueba en Configuración.
