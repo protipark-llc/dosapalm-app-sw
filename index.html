@@ -332,7 +332,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-05 22:47 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-06 00:35 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -3204,6 +3204,20 @@ const ESTADO_KEYS = {dose:'dp_dose', perdidas:'dp_perdidas', turbvel:'dp_turbvel
 let estadoTs = {}
 try{ estadoTs = JSON.parse(localStorage.getItem('dp_estadots')||'{}') }catch(e){}
 let estadoLast = {}, estadoPulled = false
+// v14.8: claves que se aplican EN CALIENTE al bajar de la nube (sin recargar).
+// Cada sección registra su aplicador: estadoHot.perfiles = v => {...}
+const estadoHot = {}
+// v14.8: subida INMEDIATA (debounce 800 ms) al guardar algo compartido, en vez
+// de esperar al tick de 60 s — si el usuario cierra la app, el cambio ya subió.
+let estadoPushTm = null
+function cloudPushEstadoPronto(){
+  if(!cloudOn()) return
+  clearTimeout(estadoPushTm)
+  estadoPushTm = setTimeout(()=>{
+    if(estadoPulled) cloudPushEstado()
+    else cloudPullEstado(false).then(()=> cloudPushEstado())
+  }, 800)
+}
 function estadoBase(){ return cloudCfg.url.replace(/\/+$/,'')+'/rest/v1/dosapalm_estado' }
 async function cloudPushEstado(){
   if(!cloudOn() || !estadoPulled) return   // nunca pisar la nube sin haberla leído
@@ -3241,7 +3255,11 @@ async function cloudPullEstado(alInicio){
       if(estadoLast[r.k]===undefined && local!=null) estadoLast[r.k] = local
       if(ts > (estadoTs[r.k]||0) && r.v !== local){
         try{ localStorage.setItem(sk, r.v) }catch(e){}
-        estadoTs[r.k] = ts; estadoLast[r.k] = r.v; adoptados++
+        estadoTs[r.k] = ts; estadoLast[r.k] = r.v
+        // v14.8: si la sección sabe aplicarlo en caliente, no hace falta recargar
+        let caliente = false
+        if(estadoHot[r.k]){ try{ estadoHot[r.k](r.v); caliente = true; log('== Nube: '+r.k+' actualizado desde otro dispositivo ==') }catch(e){} }
+        if(!caliente) adoptados++
       } else if(estadoTs[r.k]===undefined) estadoTs[r.k] = ts
     })
     try{ localStorage.setItem('dp_estadots', JSON.stringify(estadoTs)) }catch(e){}
@@ -3943,7 +3961,18 @@ function liveApply(){
 let perfiles = []
 try{ const sp=JSON.parse(localStorage.getItem('dp_perfiles')||'null'); if(Array.isArray(sp)) perfiles=sp }catch(e){}
 let perfilActivo = localStorage.getItem('dp_perfilactivo') || ''
-function savePerfiles(){ try{ localStorage.setItem('dp_perfiles', JSON.stringify(perfiles)) }catch(e){} }
+function savePerfiles(){
+  try{ localStorage.setItem('dp_perfiles', JSON.stringify(perfiles)) }catch(e){}
+  cloudPushEstadoPronto()   // v14.8: a la nube ya, no en el próximo tick
+}
+// v14.8: perfiles que llegan de la nube (otro dispositivo) se aplican en vivo
+estadoHot.perfiles = (v)=>{
+  const arr = JSON.parse(v); if(!Array.isArray(arr)) return
+  perfiles = arr
+  if(perfilActivo && !perfiles.some(p=>p.id===perfilActivo)){ perfilActivo=''; try{ localStorage.removeItem('dp_perfilactivo') }catch(e){} }
+  renderPerfiles()
+  pushAlert('&#9729; Perfiles de dosificación actualizados desde la nube ('+perfiles.length+')','info')
+}
 function perfilSnapshot(){
   return { dosis:dose.dosis, turb:dose.turb, tini:dose.tini, tfin:dose.tfin, retardo:dose.retardo, dutyFijo:dose.dutyFijo, perdida:dose.perdida, pinon:dose.pinon||null }
 }
