@@ -332,7 +332,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-06 01:13 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-08 23:16 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -765,6 +765,13 @@
               <button class="btn ghost" id="rampaApply">Aplicar</button>
             </div>
             <div class="note">Tiempo que tarda la turbina en ir de 0 al 100 % de potencia (y de 100 a 0) — arranque y frenado suaves y controlados. Ej.: 4000 ms = 4 s hasta plena potencia. Queda guardado en la tarjeta.</div>
+            <div style="display:flex;gap:7px;align-items:center;margin-top:10px">
+              <span style="font-size:12px;flex-shrink:0">Tope turbina</span>
+              <input type="number" id="turbMax" class="numin" value="78" min="40" max="100" step="1" style="flex:1"/>
+              <span class="muted" style="font-size:11px">%</span>
+              <button class="btn ghost" id="turbMaxApply">Aplicar</button>
+            </div>
+            <div class="note"><b>Tope duro</b> de potencia de la turbina. La tarjeta recorta cualquier objetivo por encima (slider de Pruebas, perfiles, pulsador) y el slider de Pruebas no pasa de aquí. Un 100 % sostenido quemó la etapa de potencia: 78 % es el máximo probado en campo. Queda guardado en la tarjeta.</div>
             <div id="calResults" style="margin-top:8px"></div>
             <div class="note">La calibración mueve <b>únicamente el motor dosificador</b> — turbina y tolva apagadas. <b>Arranca siempre al 90% de duty</b> (fuerza de sobra para despegar) y el lazo converge bajando hacia el duty real del retardo durante el tiempo de medición elegido. <b>Usar</b> aplica ese retardo como configuración de trabajo de la máquina.</div>
           </div>
@@ -1212,6 +1219,8 @@ var DosapalmProtocol = (() => {
      */
     rearme: (ms) => `rearme ${Math.max(0, Math.round(ms))}`,
     /** v14.2: rampa de la turbina (ms de 0 a 100 %). */
+    /** v14.4: tope duro de la turbina (%). */
+    turbmax: (pct) => `turbmax ${Math.min(100, Math.max(40, Math.round(pct)))}`,
     rampa: (ms) => `rampa ${Math.min(2e4, Math.max(200, Math.round(ms)))}`,
     /** v8.4: frecuencia PWM por motor (100–40000 Hz, persistente en el equipo). */
     freq: (motor, hz) => `freq ${motor} ${Math.min(4e4, Math.max(100, Math.round(hz)))}`,
@@ -2498,6 +2507,7 @@ function onLine(line){
     }
     // v14.2: rampa de la turbina (misma línea del status; ausente en firmware viejo)
     if((mCfg = /\| rampa (\d+) ms/.exec(line))){ boardCfg = boardCfg || {}; boardCfg.rampa = Number(mCfg[1]) }
+    if((mCfg = /\| tope turbina (\d+)%/.exec(line))){ boardCfg = boardCfg || {}; boardCfg.turbmax = Number(mCfg[1]); setTurbMax(boardCfg.turbmax) }   // v14.4
     // v12.1: frecuencias PWM al diff (misma línea del status)
     if((mCfg = /PWM: turb (\d+) Hz \| dosf (\d+) Hz \| tol (\d+) Hz/.exec(line))){
       boardCfg = boardCfg || {}
@@ -4288,9 +4298,10 @@ function sendPrueba(c){
       el.value = v; $(id+'V').textContent = v
       log('!! Dosificador: mínimo operativo '+DOSF_PCT_MIN+'% (calibración de campo) — ajustado')
     }
-    // v8.9: la turbina llega al 100%, pero por encima del 78% se avisa
-    if(motor==='turb' && v>78){
-      log('!! Turbina al '+v+'%: por encima del máximo recomendado (78%)')
+    // v14.4: tope duro — el slider no pasa del tope configurado (antes solo avisaba >78 %)
+    if(motor==='turb' && v>turbMaxApp){
+      v = turbMaxApp; el.value = v; $(id+'V').textContent = v
+      log('!! Turbina: tope '+turbMaxApp+'% (configurable en Configuración) — ajustado')
     }
     sendPrueba(cmd.motor(motor, v))
   })
@@ -4299,7 +4310,7 @@ function sendPrueba(c){
 document.querySelectorAll('[data-mtog]').forEach(b=> b.addEventListener('click', ()=>{
   const motor = b.dataset.mtog
   const cur = { turb:state.turb, dosf:state.dosf, tol:state.tol }[motor]
-  sendPrueba(cmd.motor(motor, cur>0 ? 0 : 100))
+  sendPrueba(cmd.motor(motor, cur>0 ? 0 : (motor==='turb' ? turbMaxApp : 100)))   // v14.4: Máx = tope
 }))
 // LEDs y salidas
 document.querySelectorAll('.sw[data-led]').forEach(sw=> sw.addEventListener('click', ()=>{
@@ -4589,6 +4600,25 @@ let fqPending = null
 
 // guardián de atasco configurable (v8.3, persistente en la tarjeta)
 // v14.2: rampa de aceleración/frenado de la turbina (ms de 0 a 100 %)
+// v14.4: tope duro de la turbina — el slider de Pruebas y todo objetivo se
+// recortan a este valor (la tarjeta también lo recorta por su cuenta).
+let turbMaxApp = 78
+try{ turbMaxApp = Math.min(100, Math.max(40, parseInt(localStorage.getItem('dp_turbmax')||'78',10)||78)) }catch(e){}
+function setTurbMax(p){
+  turbMaxApp = Math.min(100, Math.max(40, p))
+  try{ localStorage.setItem('dp_turbmax', String(turbMaxApp)) }catch(e){}
+  $('turbMax').value = turbMaxApp
+  const sl = $('pTurb'); sl.max = turbMaxApp
+  if(Number(sl.value) > turbMaxApp){ sl.value = turbMaxApp; $('pTurbV').textContent = turbMaxApp }
+}
+$('turbMaxApply').onclick = ()=>{
+  if(transport==='none'){ calMsg('⚠ Conecta el equipo primero.'); return }
+  const p = Math.min(100, Math.max(40, parseInt($('turbMax').value||'78',10)||78))
+  setTurbMax(p)
+  send('turbmax '+p)
+  pushAlert('Tope de la turbina: '+p+' %','info')
+}
+setTurbMax(turbMaxApp)
 $('rampaApply').onclick = ()=>{
   if(transport==='none'){ calMsg('⚠ Conecta el equipo primero.'); return }
   const ms = Math.min(20000, Math.max(200, parseInt($('rampaMs').value||'2000',10)||2000))
@@ -4617,6 +4647,7 @@ $('btnSendCfg').onclick = ()=>{
   send(cmd.atasco(Math.max(500, parseInt($('atascoMs').value||'5000',10))))
   send(cmd.rearme(Math.max(0, parseInt($('rearmeMs').value||'2000',10)||0)))
   send('rampa '+Math.min(20000, Math.max(200, parseInt($('rampaMs').value||'2000',10)||2000)))   // v14.2
+  send('turbmax '+Math.min(100, Math.max(40, parseInt($('turbMax').value||'78',10)||78)))   // v14.4
   send(cmd.freq('turb', pwmFreq.turb)); send(cmd.freq('dosf', pwmFreq.dosf)); send(cmd.freq('tol', pwmFreq.tol))
   // v9.4: pulsaciones sostenidas del botón físico
   send(cmd.holdOp(Math.max(1000, parseInt($('holdOpMs').value||'5000',10))))
@@ -4676,6 +4707,7 @@ function diffFilas(){
     ['Atasco (ms)', parseInt($('atascoMs').value,10)||0, b.atasco],
     ['Rearme (ms)', parseInt($('rearmeMs').value,10)||0, b.rearme],
     ['Rampa turbina (ms)', parseInt($('rampaMs').value,10)||0, b.rampa],
+    ['Tope turbina (%)', parseInt($('turbMax').value,10)||0, b.turbmax],
     ['Pulsación operación (ms)', parseInt($('holdOpMs').value,10)||0, b.holdOp],
     ['Pulsación Bluetooth (ms)', parseInt($('holdBtMs').value,10)||0, b.holdBt],
     ['Antirebote (ms)', parseInt($('reboteMs').value,10)||0, b.rebote],
@@ -4713,6 +4745,7 @@ $('btnDiffAdopt').onclick = ()=>{
   if(b.atasco!=null) $('atascoMs').value = b.atasco
   if(b.rearme!=null){ $('rearmeMs').value = b.rearme; appRearmeMs = b.rearme }
   if(b.rampa!=null) $('rampaMs').value = b.rampa
+  if(b.turbmax!=null) setTurbMax(b.turbmax)
   if(b.holdOp!=null) $('holdOpMs').value = b.holdOp
   if(b.holdBt!=null) $('holdBtMs').value = b.holdBt
   if(b.rebote!=null) $('reboteMs').value = b.rebote
@@ -4861,7 +4894,7 @@ function btnGuardando(btn, opts){
     setTimeout(()=>{ btn.classList.remove('savedok'); btn.innerHTML = orig; delete btn.dataset.saving }, 1000)
   }, opts.ms||900)
 }
-;[['holdOpApply',1],['holdBtApply',1],['reboteApply',1],['atascoApply',1],['rearmeApply',1],['rampaApply',1],['fqApply',1],['monApply',1],['btnDiffPush',1],['btnSendCfg',1],['pdSave',0],['tvSave',0],['pnSave',0]].forEach(par=>{
+;[['holdOpApply',1],['holdBtApply',1],['reboteApply',1],['atascoApply',1],['rearmeApply',1],['rampaApply',1],['turbMaxApply',1],['fqApply',1],['monApply',1],['btnDiffPush',1],['btnSendCfg',1],['pdSave',0],['tvSave',0],['pnSave',0]].forEach(par=>{
   const b = $(par[0]); if(!b) return
   b.addEventListener('click', ()=> btnGuardando(b, {device: !!par[1], ms: (par[0]==='btnSendCfg'||par[0]==='btnDiffPush') ? 1800 : 900}))
 })
