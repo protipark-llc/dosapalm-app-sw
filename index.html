@@ -332,7 +332,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-08 23:16 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-09 18:12 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -1025,6 +1025,8 @@
               <div style="flex:1"><div class="muted" style="font-size:10px;text-align:center;margin-bottom:3px">Pausa entre ciclos (s)</div><input type="number" class="numin" id="autoPausa" value="5" min="0" max="600" style="margin:0"/></div>
             </div>
             <div style="height:12px;background:#eef1f5;border-radius:99px;overflow:hidden;margin-top:10px"><div id="autoBar" style="height:100%;width:0%;background:var(--orange);border-radius:99px;transition:width .3s"></div></div>
+            <div id="autoSegs" style="display:flex;gap:2px;margin-top:6px;min-height:10px" title="Cada casilla es un ciclo: pasa el mouse para ver su detalle"></div>
+            <div class="muted" style="font-size:10px;margin-top:3px;display:none" id="autoLeyenda"><span style="color:#2e7d32">&#9632;</span> pulsos completos &nbsp; <span style="color:#f5a623">&#9632;</span> incompleto (menos pulsos de los esperados) &nbsp; <span style="color:#d32f2f">&#9632;</span> error/parada &nbsp; <span style="color:#c9ced6">&#9632;</span> pendiente</div>
             <div class="muted" id="autoMsg" style="font-size:11.5px;margin-top:5px">Listo.</div>
             <div style="display:flex;gap:7px;margin-top:8px">
               <button class="btn primary" id="autoStart" style="flex:1">&#9654; Iniciar</button>
@@ -2387,7 +2389,12 @@ function onLine(line){
       pendDlTimer = setTimeout(()=> finDescarga(null), 8000)
     }
     if(nuevo){
-      if(auto && (Date.now()-auto.t0) < 6*3600000) auto.gramos += Number(mEvt[3])||0   // v14.4: gramos del corredor
+      if(auto && (Date.now()-auto.t0) < 6*3600000){
+        auto.gramos += Number(mEvt[3])||0; auto.pulsos += Number(mEvt[4])||0   // v14.4: gramos · v15.1: pulsos hall del corredor
+        const c = auto.ciclos.slice().reverse().find(x=>!x.evt)   // v15.1: el EVT completa el último ciclo sin dato
+        if(c){ c.evt = true; c.gramos = Number(mEvt[3])||0; c.pulsos = Number(mEvt[4])||c.pulsos; c.resultado = mEvt[12]||null; autoRenderSegs() }
+        else auto.evtPend = { t: Date.now(), gramos: Number(mEvt[3])||0, pulsos: Number(mEvt[4])||0, resultado: mEvt[12]||null }   // v15.1: el EVT llegó ANTES del cierre del ciclo (parada): se guarda y se pega al registro
+      }
       syncNewCount++
       clearTimeout(syncNewTimer)
       syncNewTimer = setTimeout(()=>{
@@ -4110,15 +4117,18 @@ function autoUI(){
   if(auto.modo==='n'){ pct = Math.round(auto.hechos/auto.n*100); meta = 'ciclo '+Math.min(auto.hechos+1, auto.n)+' de '+auto.n }
   else { const tot = auto.hasta-auto.t0, el = Math.min(tot, Date.now()-auto.t0); pct = Math.round(el/tot*100); meta = Math.ceil((auto.hasta-Date.now())/60000)+' min restantes' }
   $('autoBar').style.width = pct+'%'
-  $('autoMsg').textContent = (auto.esperando ? 'Ciclo en curso — ' : (auto.pausaHasta && Date.now()<auto.pausaHasta ? 'Pausa/rearme — ' : ''))+meta+' · hechos '+auto.hechos+' · errores '+auto.err+' · '+auto.gramos+' g'
+  $('autoMsg').textContent = (auto.esperando ? 'Ciclo en curso — ' : (auto.pausaHasta && Date.now()<auto.pausaHasta ? 'Pausa/rearme — ' : ''))+meta+' · hechos '+auto.hechos+' · errores '+auto.err+' · '+auto.gramos+' g · '+auto.pulsos+' pulsos'+(auto.esperando ? ' (ciclo actual: '+Math.max(0, (state.hall||0)-(overlay.hallStart||0))+')' : '')
   setChip($('autoChip'), true, 'Corriendo '+pct+'%', 'g')
+  if(auto.esperando) autoRenderSegs()   // v15.1: pulsos del ciclo en curso en el tooltip
 }
 function autoFin(motivo, sev){
   const a = auto; auto = null
   clearTimeout(a && a.wd); clearTimeout(a && a.tm)
   autoUI()
-  $('autoMsg').textContent = motivo+' — '+a.hechos+' ciclos, '+a.err+' errores, '+a.gramos+' g en '+Math.round((Date.now()-a.t0)/1000)+' s'
-  pushAlert('&#128257; Ciclos automáticos: '+motivo+' ('+a.hechos+' ciclos, '+a.gramos+' g)', sev||'info')
+  const malos = a.ciclos.map((c,i)=> autoEstadoCiclo(c)!=='ok' ? '#'+(i+1)+' ('+(autoEstadoCiclo(c)==='error'?'error':c.pulsos+'/'+c.esperados+' pulsos')+')' : null).filter(Boolean)
+  $('autoMsg').textContent = motivo+' — '+a.hechos+' ciclos, '+a.err+' errores, '+a.gramos+' g, '+a.pulsos+' pulsos en '+Math.round((Date.now()-a.t0)/1000)+' s'+(malos.length ? ' · con problema: '+malos.join(', ') : ' · todos los ciclos completos ✓')
+  auto = a; autoRenderSegs(); auto = null   // v15.1: la barra por ciclo queda visible hasta Reiniciar
+  pushAlert('&#128257; Ciclos automáticos: '+motivo+' ('+a.hechos+' ciclos, '+a.gramos+' g, '+a.pulsos+' pulsos)', sev||'info')
 }
 function autoSiguiente(){
   if(!auto) return
@@ -4128,7 +4138,7 @@ function autoSiguiente(){
   const rest = rearmeRestante()
   if(rest>0){ auto.pausaHasta = Date.now()+rest; autoUI(); auto.tm = setTimeout(autoSiguiente, rest+200); return }
   if(auto.pausaHasta && Date.now()<auto.pausaHasta){ auto.tm = setTimeout(autoSiguiente, auto.pausaHasta-Date.now()+50); return }
-  auto.esperando = true; autoUI()
+  auto.esperando = true; auto.cicloIni = Date.now(); autoUI(); autoRenderSegs()
   ejecutar()
   if(!expectingStart){   // ejecutar() se negó (sin config / sin operación / rearme)
     auto.esperando = false; auto.err++
@@ -4136,11 +4146,48 @@ function autoSiguiente(){
     auto.tm = setTimeout(autoSiguiente, 3000); return
   }
   clearTimeout(auto.wd)
-  auto.wd = setTimeout(()=>{ if(auto && auto.esperando){ auto.esperando=false; auto.err++; log('!! Ciclo automático sin cierre en 60 s — se cuenta como error'); autoSiguiente() } }, 60000)
+  auto.wd = setTimeout(()=>{ if(auto && auto.esperando){ auto.esperando=false; auto.err++; auto.ciclos.push({ ini: auto.cicloIni||Date.now(), fin: Date.now(), esperados: overlay.target||0, pulsos: Math.max(0,(state.hall||0)-(overlay.hallStart||0)), gramos:null, resultado:'sin cierre (60 s)', error:true, evt:false }); autoRenderSegs(); log('!! Ciclo automático sin cierre en 60 s — se cuenta como error'); autoSiguiente() } }, 60000)
+}
+// v15.1: registro por ciclo — pulsos ESPERADOS (objetivo que fijó el equipo al
+// arrancar) vs pulsos REALES contados por el hall; el EVT que llega después
+// completa gramos/resultado (ok | partial | error). Se pinta en la barra
+// segmentada (#autoSegs) con tooltip por ciclo.
+function autoEstadoCiclo(c){
+  if(c.error || (c.resultado && /error/i.test(c.resultado))) return 'error'
+  if((c.resultado && /partial/i.test(c.resultado)) || (c.esperados>0 && c.pulsos < c.esperados)) return 'incompleto'
+  return 'ok'
+}
+function autoRenderSegs(){
+  const box = $('autoSegs'); if(!box) return
+  if(!auto){ box.innerHTML = ''; $('autoLeyenda').style.display = 'none'; return }
+  $('autoLeyenda').style.display = ''
+  const col = {ok:'#2e7d32', incompleto:'#f5a623', error:'#d32f2f', pend:'#c9ced6', curso:'var(--orange)'}
+  const total = auto.modo==='n' ? Math.max(auto.n, auto.ciclos.length + (auto.esperando?1:0)) : auto.ciclos.length + (auto.esperando?1:0)
+  let h = ''
+  for(let i=0;i<total;i++){
+    const c = auto.ciclos[i]
+    let color = col.pend, tip = 'Ciclo '+(i+1)+': pendiente'
+    if(c){
+      const st = autoEstadoCiclo(c); color = col[st]
+      tip = 'Ciclo '+(i+1)+' — '+(st==='ok'?'OK':st==='incompleto'?'INCOMPLETO':'ERROR')+'\n'
+        +'Pulsos: '+c.pulsos+' de '+(c.esperados||'?')+' esperados'+(c.esperados>0 ? ' ('+Math.round(c.pulsos/c.esperados*100)+' %)' : '')+'\n'
+        +'Gramos: '+(c.gramos!=null ? c.gramos+' g' : 'sin EVT aún')+'\n'
+        +'Resultado del equipo: '+(c.resultado||'—')+'\n'
+        +'Duración: '+Math.round((c.fin-c.ini)/1000)+' s · '+new Date(c.ini).toLocaleTimeString()
+    } else if(i===auto.ciclos.length && auto.esperando){
+      color = col.curso; tip = 'Ciclo '+(i+1)+': en curso — '+Math.max(0,(state.hall||0)-(overlay.hallStart||0))+' pulsos de '+(overlay.target||'?')
+    }
+    h += '<div title="'+tip.replace(/"/g,'&quot;')+'" style="flex:1;min-width:6px;height:10px;border-radius:3px;background:'+color+';cursor:help"></div>'
+  }
+  box.innerHTML = h
 }
 function autoCicloTermino(){
   if(!auto || !auto.esperando) return
   auto.esperando = false; clearTimeout(auto.wd)
+  const reg = { ini: auto.cicloIni||Date.now(), fin: Date.now(), esperados: overlay.target||0, pulsos: Math.max(0,(state.hall||0)-(overlay.hallStart||0)), gramos:null, resultado:null, error: !!autoUltimoFinError, evt:false }
+  const ep = auto.evtPend; if(ep && Date.now()-ep.t < 15000){ reg.evt = true; reg.gramos = ep.gramos; reg.pulsos = ep.pulsos||reg.pulsos; reg.resultado = ep.resultado } auto.evtPend = null
+  auto.ciclos.push(reg)
+  autoRenderSegs()
   if(autoUltimoFinError){ auto.err++; autoUltimoFinError = false; if(auto.err>=3 && auto.hechos===0){ autoFin('detenido: 3 ciclos seguidos con error','alta'); return } }
   else auto.hechos++
   auto.pausaHasta = Date.now() + auto.pausaMs
@@ -4157,7 +4204,7 @@ $('autoStart').onclick = ()=>{
   if(!confirm('Correr ciclos REALES con el perfil "'+p.name+'"\n'+(autoModoSel==='n' ? n+' ciclos' : min+' minutos')+', pausa '+(pausaMs/1000)+' s entre ciclos.\n\nEl equipo va a dosificar de verdad. ¿Continuar?')) return
   aplicarPerfil(p, true)
   if(!session.active) setOperacionApp(true)
-  auto = { modo: autoModoSel, n, hasta: Date.now()+min*60000, pausaMs, hechos:0, err:0, gramos:0, t0: Date.now(), esperando:false, pausaHasta:0, wd:null, tm:null }
+  auto = { modo: autoModoSel, n, hasta: Date.now()+min*60000, pausaMs, hechos:0, err:0, gramos:0, pulsos:0, ciclos:[], t0: Date.now(), esperando:false, pausaHasta:0, wd:null, tm:null }
   autoUI()
   log('!! Ciclos automáticos: perfil "'+p.name+'" — '+(autoModoSel==='n' ? n+' ciclos' : min+' min'))
   auto.tm = setTimeout(autoSiguiente, 1500)   // deja aplicar perfil/operación
@@ -4177,7 +4224,7 @@ $('autoReset').onclick = ()=>{
     if(auto.esperando) send(cmd.parar())
     clearTimeout(auto.wd); clearTimeout(auto.tm); auto = null
     autoUltimoFinError = false
-    auto = { modo: cfg.modo, n: cfg.n, hasta: Date.now()+cfg.min*60000, pausaMs: cfg.pausaMs, hechos:0, err:0, gramos:0, t0: Date.now(), esperando:false, pausaHasta:0, wd:null, tm:null }
+    auto = { modo: cfg.modo, n: cfg.n, hasta: Date.now()+cfg.min*60000, pausaMs: cfg.pausaMs, hechos:0, err:0, gramos:0, pulsos:0, ciclos:[], t0: Date.now(), esperando:false, pausaHasta:0, wd:null, tm:null }
     autoUI(); $('autoMsg').textContent = 'Reiniciando la corrida desde cero…'
     log('!! Ciclos automáticos: reinicio desde cero')
     auto.tm = setTimeout(autoSiguiente, 2500)   // deja cerrar el ciclo parado + rearme
@@ -4185,6 +4232,7 @@ $('autoReset').onclick = ()=>{
   }
   autoUltimoFinError = false
   $('autoBar').style.width = '0%'
+  $('autoSegs').innerHTML = ''; $('autoLeyenda').style.display = 'none'   // v15.1
   $('autoMsg').textContent = 'Listo.'
   setChip($('autoChip'), false, '—', '')
   pushAlert('&#8635; Ciclos automáticos: contadores y progreso en cero','info')
