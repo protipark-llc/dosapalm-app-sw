@@ -332,7 +332,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-09 18:12 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-10 23:13 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -2045,6 +2045,9 @@ function marcarFinCiclo(){
   try{ localStorage.setItem('dp_lastend', String(lastDoseEndAt)) }catch(e){}
   // v14.4: el corredor automático avanza al siguiente ciclo tras la pausa
   try{ if(typeof autoCicloTermino==='function') autoCicloTermino() }catch(e){}
+  // v15.2: lo que se pospuso por estar en ciclo (descarga de pendientes, status)
+  if(dlDiferida>0){ const n = dlDiferida; dlDiferida = 0; setTimeout(()=>{ if(!cicloEnCurso() && transport!=='none' && expectedPend===0){ if(dlAuto>0){ dlAuto--; descargarPendientes(n, true) } else send(cmd.evtCount()) } }, 2500) }
+  if(statusDiferido){ statusDiferido = false; setTimeout(()=>{ if(!cicloEnCurso() && transport!=='none') pedirDatosDelEquipo() }, 1500) }
 }
 let expectingStart = false // true solo cuando la app misma pidió dosificar
 let startTimeout = null    // aviso si el equipo no confirma el arranque
@@ -2136,6 +2139,15 @@ function renderPendCard(){
 }
 let pendDlTimer = null   // v11.5: plan B si el cierre EVT END se pierde por BLE
 let dlAuto = 0           // v11.6: reintentos automáticos restantes de una descarga ya confirmada
+// v15.2: NADA pesado en plena dosis. En campo, el sondeo `evt count` de cada
+// 10 s vio 2 pendientes de ciclos viejos y la app los descargó en mitad del
+// ciclo 10; el EVT viejo (seq 108, 8 s ANTES del arranque) se tomó como el
+// cierre del ciclo actual y el corredor pasó al siguiente con la tarjeta aún
+// dosificando. Ahora: descargas, status y aviso de pendientes se DIFIEREN al
+// cierre del ciclo, y un EVT solo cierra el ciclo si es posterior a su arranque.
+let dlDiferida = 0, statusDiferido = false
+function cicloEnCurso(){ return overlay.open || (typeof auto!=='undefined' && !!auto && auto.esperando) }
+function fwTiene(v){ return parseFloat(state.fwVersion||'0') >= parseFloat(v) }
 // v11.6: purga PARCIAL segura — con pérdidas BLE (firmware viejo sin ritmo),
 // asegurar y purgar el mayor prefijo contiguo de secuencias que YA está en la
 // base. evtAck purga TODO seq ≤ X, así que X solo puede avanzar mientras cada
@@ -2231,7 +2243,8 @@ setInterval(()=>{
   // v11.9: durante un OTA no se sondea — todo el canal es para el firmware
   if(transport!=='none' && !overlay.open && !ota){ send('operacion'); send(cmd.evtCount()) }
 }, 10000)
-function pedirDatosDelEquipo(){
+function pedirDatosDelEquipo(forzar){
+  if(cicloEnCurso() && !forzar){ statusDiferido = true; return }   // v15.2: no en plena dosis
   syncCfgPending = true
   clearTimeout(syncCfgTimeout)
   syncCfgTimeout = setTimeout(()=>{ syncCfgPending = false }, 5000)
@@ -2325,7 +2338,7 @@ function onLine(line){
   else if((mRe = /\| rearme (\d+) ms/.exec(line))) appRearmeMs = Number(mRe[1])
   // v9.8: respuesta del sondeo de status — el equipo dice "estado: 0" (reposo)
   // con el overlay abierto = el ciclo terminó y el cierre se perdió.
-  const mEstado = /\| estado: (\d)/.exec(line)
+  const mEstado = /\| estado: (\d)/.exec(line) || /^ESTADO dos=(\d) hall=(\d+)/.exec(line)   // v15.2: `estado` liviano
   if(mEstado && overlay.open && Number(mEstado[1])===0 && overlay.cycleStart && Date.now()-overlay.cycleStart > 4000){
     log('!! El equipo reporta reposo (status): el ciclo ya terminó — cierro el progreso')
     const hechas = Math.max(0, state.hall - overlay.hallStart)
@@ -2340,14 +2353,17 @@ function onLine(line){
     const nPend = Number(mEvt[1])
     // v11.6: una descarga ya confirmada por el usuario se REINTENTA sola
     // hasta drenar la memoria (con purga parcial en cada pasada).
-    if(nPend>0 && dlAuto>0 && expectedPend===0 && Date.now()-lastEvtPullAt > 12000){
+    if(nPend>0 && cicloEnCurso()){
+      dlDiferida = nPend   // v15.2: se descarga al cerrar el ciclo, nunca en plena dosis
+    }
+    else if(nPend>0 && dlAuto>0 && expectedPend===0 && Date.now()-lastEvtPullAt > 12000){
       dlAuto--
       descargarPendientes(nPend, true)
     }
     // v11.1: la descarga YA NO es automática — el aviso flotante pide
     // CONFIRMACIÓN y solo al aprobar se piden los datos (y la limpieza de la
     // memoria solo tras confirmar la descarga completa con EVT END).
-    else if(nPend>0 && Date.now()-lastEvtPullAt > 15000 && Date.now()>pendSnoozeUntil){
+    else if(nPend>0 && Date.now()-lastEvtPullAt > 15000 && Date.now()>pendSnoozeUntil && !cicloEnCurso()){
       mostrarPendBanner(nPend)
       if(Date.now()-lastEvtNotifAt > 30000){
         lastEvtNotifAt = Date.now()
@@ -2368,7 +2384,9 @@ function onLine(line){
     // v9.7: el EVT es la confirmación AUTORITATIVA del equipo. Si la línea de
     // "completado" se perdió (overlay aún abierto), el EVT cierra el ciclo con
     // los gramos EXACTOS del equipo.
-    if(nuevo && overlay.open){
+    if(nuevo && overlay.open && overlay.devStartMs && Number(mEvt[2]) < overlay.devStartMs){
+      log('!! EVT seq '+mEvt[1]+' es de un ciclo ANTERIOR (ms '+mEvt[2]+' < arranque '+overlay.devStartMs+') — no cierra el ciclo en curso')   // v15.2
+    } else if(nuevo && overlay.open){
       log('!! Ciclo cerrado por el evento EVT del equipo (línea de completado perdida)')
       const res = mEvt[12]==='ok' ? 'ok' : (mEvt[12]==='partial' ? 'partial' : 'error')
       if(session.active) onDoseEvent(synthDoseEvent(Number(mEvt[3]), res))
@@ -2593,6 +2611,7 @@ function onLine(line){
       }
     }
     overlay.target = parsed.pulses; overlay.hallStart = state.hall
+    { const mI = /^\[(\d+)\]/.exec(line); overlay.devStartMs = mI ? Number(mI[1]) : 0 }   // v15.2: reloj del equipo al arrancar
     overlay.stageStart = Date.now()
     overlay.warmupMs = parsed.warmupMs>0 ? parsed.warmupMs : dose.tini
     overlay.cleanMs = dose.tfin
@@ -3579,7 +3598,7 @@ function renderOverlay(){
   // respuesta del status dice si el equipo ya está en reposo.
   if(transport!=='none' && Date.now()-(overlay.lastPoll||0) > 5000){
     overlay.lastPoll = Date.now()
-    send(cmd.status())
+    send(fwTiene('14.5') ? 'estado' : cmd.status())   // v15.2: 1 línea en vez de 15 (fw ≥ 14.5)
   }
   if(ds==='idle'){
     // el equipo ya reporta reposo: cerrar de inmediato tras una breve espera
@@ -4117,7 +4136,7 @@ function autoUI(){
   if(auto.modo==='n'){ pct = Math.round(auto.hechos/auto.n*100); meta = 'ciclo '+Math.min(auto.hechos+1, auto.n)+' de '+auto.n }
   else { const tot = auto.hasta-auto.t0, el = Math.min(tot, Date.now()-auto.t0); pct = Math.round(el/tot*100); meta = Math.ceil((auto.hasta-Date.now())/60000)+' min restantes' }
   $('autoBar').style.width = pct+'%'
-  $('autoMsg').textContent = (auto.esperando ? 'Ciclo en curso — ' : (auto.pausaHasta && Date.now()<auto.pausaHasta ? 'Pausa/rearme — ' : ''))+meta+' · hechos '+auto.hechos+' · errores '+auto.err+' · '+auto.gramos+' g · '+auto.pulsos+' pulsos'+(auto.esperando ? ' (ciclo actual: '+Math.max(0, (state.hall||0)-(overlay.hallStart||0))+')' : '')
+  $('autoMsg').textContent = (transport==='none' ? 'Sin enlace — esperando reconexión — ' : auto.esperando ? 'Ciclo en curso — ' : (auto.pausaHasta && Date.now()<auto.pausaHasta ? 'Pausa/rearme — ' : ''))+meta+' · hechos '+auto.hechos+' · errores '+auto.err+' · '+auto.gramos+' g · '+auto.pulsos+' pulsos'+(auto.esperando ? ' (ciclo actual: '+Math.max(0, (state.hall||0)-(overlay.hallStart||0))+')' : '')
   setChip($('autoChip'), true, 'Corriendo '+pct+'%', 'g')
   if(auto.esperando) autoRenderSegs()   // v15.1: pulsos del ciclo en curso en el tooltip
 }
@@ -4132,13 +4151,18 @@ function autoFin(motivo, sev){
 }
 function autoSiguiente(){
   if(!auto) return
-  if(transport==='none'){ autoFin('detenido: equipo desconectado','alta'); return }
+  if(transport==='none'){   // v15.2: el BLE se cae y se reconecta solo — se espera hasta 5 min
+    if(!auto.sinEnlace) auto.sinEnlace = Date.now()
+    if(Date.now()-auto.sinEnlace > 5*60000){ autoFin('detenido: 5 min sin enlace con el equipo','alta'); return }
+    autoUI(); auto.tm = setTimeout(autoSiguiente, 3000); return
+  }
+  auto.sinEnlace = 0
   if(auto.modo==='n' ? auto.hechos>=auto.n : Date.now()>=auto.hasta){ autoFin('completado ✓'); return }
   if(overlay.open){ auto.tm = setTimeout(autoSiguiente, 500); return }   // el ciclo anterior aún cierra
   const rest = rearmeRestante()
   if(rest>0){ auto.pausaHasta = Date.now()+rest; autoUI(); auto.tm = setTimeout(autoSiguiente, rest+200); return }
   if(auto.pausaHasta && Date.now()<auto.pausaHasta){ auto.tm = setTimeout(autoSiguiente, auto.pausaHasta-Date.now()+50); return }
-  auto.esperando = true; auto.cicloIni = Date.now(); autoUI(); autoRenderSegs()
+  auto.esperando = true; auto.cicloIni = Date.now(); auto.wdEsperas = 0; autoUI(); autoRenderSegs()
   ejecutar()
   if(!expectingStart){   // ejecutar() se negó (sin config / sin operación / rearme)
     auto.esperando = false; auto.err++
@@ -4146,7 +4170,20 @@ function autoSiguiente(){
     auto.tm = setTimeout(autoSiguiente, 3000); return
   }
   clearTimeout(auto.wd)
-  auto.wd = setTimeout(()=>{ if(auto && auto.esperando){ auto.esperando=false; auto.err++; auto.ciclos.push({ ini: auto.cicloIni||Date.now(), fin: Date.now(), esperados: overlay.target||0, pulsos: Math.max(0,(state.hall||0)-(overlay.hallStart||0)), gramos:null, resultado:'sin cierre (60 s)', error:true, evt:false }); autoRenderSegs(); log('!! Ciclo automático sin cierre en 60 s — se cuenta como error'); autoSiguiente() } }, 60000)
+  auto.wd = setTimeout(autoWatchdog, 60000)
+}
+// v15.2: el vigilante del ciclo NO cuenta error si el problema es el enlace:
+// sin Bluetooth se espera (hasta 5 × 30 s) a que la reconexión y el sondeo
+// `estado` resincronicen; el EVT descargado al cerrar completa el registro.
+function autoWatchdog(){
+  if(!auto || !auto.esperando) return
+  if(transport==='none'){
+    auto.wdEsperas = (auto.wdEsperas||0)+1
+    if(auto.wdEsperas <= 5){ log('!! Ciclo en curso sin enlace — esperando reconexión ('+auto.wdEsperas+'/5)'); autoUI(); auto.wd = setTimeout(autoWatchdog, 30000); return }
+  }
+  auto.esperando=false; auto.err++
+  auto.ciclos.push({ ini: auto.cicloIni||Date.now(), fin: Date.now(), esperados: overlay.target||0, pulsos: Math.max(0,(state.hall||0)-(overlay.hallStart||0)), gramos:null, resultado:'sin cierre (60 s)', error:true, evt:false })
+  autoRenderSegs(); log('!! Ciclo automático sin cierre en 60 s — se cuenta como error'); autoSiguiente()
 }
 // v15.1: registro por ciclo — pulsos ESPERADOS (objetivo que fijó el equipo al
 // arrancar) vs pulsos REALES contados por el hall; el EVT que llega después
