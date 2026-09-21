@@ -2,8 +2,17 @@
 <html lang="es">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
 <title>DOSAPALM V1 — App de referencia (v7 en vivo)</title>
+<!-- v15.4: PWA instalable (Android: "Instalar app"; iPhone: Compartir → "Añadir a pantalla de inicio") -->
+<link rel="manifest" href="manifest.webmanifest"/>
+<meta name="theme-color" content="#E8721C"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+<meta name="apple-mobile-web-app-title" content="DOSAPALM"/>
+<link rel="apple-touch-icon" href="apple-touch-icon.png"/>
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png"/>
 <style>
   :root{
     --orange:#E8721C; --green:#4CAF50; --green-d:#2f8a34; --blue:#2f6bd6; --ink:#1f2430;
@@ -332,7 +341,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-21 19:52 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-21 20:21 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -825,6 +834,7 @@
             <div class="fieldlabel">Clave anon (public)</div>
             <input type="text" class="pwin" id="cloudKey" autocomplete="off" spellcheck="false" style="font-size:12px"/>
             <button class="btn primary block" id="cloudSave" style="margin-top:10px">Guardar y sincronizar ahora</button>
+            <button class="btn primary block" id="pwaInstall" style="margin-top:8px;display:none">&#128241; Instalar DOSAPALM en este dispositivo</button>
             <button class="btn ghost block" id="cloudLink" style="margin-top:8px">&#128279; Copiar enlace para configurar otros dispositivos</button>
             <div class="note">La app sube lo nuevo y baja lo de otros dispositivos cada minuto (y al conectar). La base local sigue funcionando sin internet; al volver la señal se ponen al día solas. La clave anon es pública por diseño — protege la tabla con las políticas RLS del script de creación.</div>
           </div>
@@ -1893,6 +1903,7 @@ renderBat()
 let verTimer = null
 function onOpen(kind){
   transport = kind
+  lastEndDevMs = 0   // v15.4: reloj [ms] del equipo anterior no vale para este
   connChan = (kind==='ble') ? 'ble' : 'wifi'   // la radio activa es por la que entramos
   try{ localStorage.setItem('dp_lasttr', kind) }catch(e){}   // v11.1: para reconectar tras F5
   renderConnSw()
@@ -1912,7 +1923,7 @@ function onOpen(kind){
   }, 4000)
   syncCfgPending = true   // v10.4: el status de la conexión puebla los campos
   clearTimeout(syncCfgTimeout)
-  syncCfgTimeout = setTimeout(()=>{ syncCfgPending = false }, 6000)
+  syncCfgTimeout = setTimeout(()=>{ syncCfgPending = false; if(boardCfg) renderCfgDiff(false) }, 6000)   // v15.4: firmware viejo sin 'Heap' → pintar lo recogido
   send(cmd.status()); send(cmd.modo('real')); send(cmd.log(true))
   send(cmd.configurado())   // v9.2: ¿la tarjeta ya tiene configuración aplicada?
   send('operacion')         // v9.4: sincronizar el estado de toma de datos
@@ -2254,7 +2265,7 @@ function pedirDatosDelEquipo(forzar){
   if(cicloEnCurso() && !forzar){ statusDiferido = true; return }   // v15.2: no en plena dosis
   syncCfgPending = true
   clearTimeout(syncCfgTimeout)
-  syncCfgTimeout = setTimeout(()=>{ syncCfgPending = false }, 5000)
+  syncCfgTimeout = setTimeout(()=>{ syncCfgPending = false; if(boardCfg) renderCfgDiff(false) }, 5000)   // v15.4
   send(cmd.status())
 }
 // v9.2: estado de la bandera de configuración de la tarjeta (null = desconocido)
@@ -2548,7 +2559,13 @@ function onLine(line){
     if((mCfg = /Pulsador: operacion (\d+) ms \| bluetooth (\d+) ms \| antirebote (\d+) ms/.exec(line))){
       boardCfg = boardCfg || {}
       boardCfg.holdOp = Number(mCfg[1]); boardCfg.holdBt = Number(mCfg[2]); boardCfg.rebote = Number(mCfg[3])
-      syncCfgPending = false   // última línea del bloque: recolección completa
+    }
+    // v15.4: el bloque se cierra en la ÚLTIMA línea del status (Heap). Antes se
+    // cerraba en "Pulsador", que el firmware real imprime en TERCER lugar: con
+    // hardware real el diff nunca recogía dosis/PWM/rampa/tope (solo el
+    // simulador, que la imprimía al final, parecía funcionar).
+    if(/^\s*Heap: \d+/.test(line)){
+      syncCfgPending = false
       clearTimeout(syncCfgTimeout)
       renderCfgDiff(true)
     }
@@ -3343,7 +3360,8 @@ async function cloudPullEstado(alInicio){
   }catch(e){}
 }
 // sincronización de fondo: cada 60 s sube lo nuevo y baja lo de otros
-setInterval(()=>{ if(cloudOn()){ cloudPush(); cloudPull(false); cloudPullEstado(false).then(()=> cloudPushEstado()) } }, 60000)
+let cloudTick = 0
+setInterval(()=>{ if(cloudOn()){ cloudPush(); if(++cloudTick % 5 === 0) cloudPull(false); cloudPullEstado(false).then(()=> cloudPushEstado()) } }, 60000)   // v15.4: bajada completa cada 5 min
 setTimeout(()=>{ if(cloudOn()){ cloudPull(false).then(()=> cloudPush()); cloudPullEstado(true).then(()=> cloudPushEstado()) } }, 4000)
 
 // ---------- v12.2: red compartida y escáner de equipos Wi-Fi ----------
@@ -5163,6 +5181,30 @@ applyViewMode()
 
 buildTabs(); newTracker(); render()
 setInterval(()=>{ const d=new Date(); $('clock').textContent=d.getHours()+':'+String(d.getMinutes()).padStart(2,'0') }, 1000)
+})()
+</script>
+<script>
+// v15.4: PWA — service worker solo en https (GitHub Pages); en file:// o http
+// local no aplica. Red primero: siempre la versión nueva si hay conexión.
+(function(){
+  if(!('serviceWorker' in navigator) || location.protocol!=='https:') return
+  navigator.serviceWorker.register('sw.js').then(reg=>{
+    reg.addEventListener('updatefound', ()=>{
+      const nw = reg.installing
+      nw && nw.addEventListener('statechange', ()=>{
+        if(nw.state==='installed' && navigator.serviceWorker.controller){
+          try{ pushAlert('&#128260; Hay una versión nueva de la app: cierra y vuelve a abrir para usarla','info') }catch(e){}
+        }
+      })
+    })
+  }).catch(()=>{})
+  // Aviso de instalación (Android/Chrome): se guarda el evento y se ofrece un botón en Config
+  let deferred = null
+  window.addEventListener('beforeinstallprompt', e=>{
+    e.preventDefault(); deferred = e
+    const b = document.getElementById('pwaInstall'); if(b){ b.style.display=''; b.onclick = ()=>{ deferred.prompt(); deferred.userChoice.finally(()=>{ deferred=null; b.style.display='none' }) } }
+  })
+  window.addEventListener('appinstalled', ()=>{ try{ pushAlert('&#128241; DOSAPALM instalada en este dispositivo','info') }catch(e){} })
 })()
 </script>
 </body>

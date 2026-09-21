@@ -1,0 +1,19 @@
+{
+  "name": "DOSAPALM V1",
+  "short_name": "DOSAPALM",
+  "description": "Control y registro de la dosificadora de polen DOSAPALM (Envases S.A.S.)",
+  "id": "/dosapalm-app-sw/",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#eef1f5",
+  "theme_color": "#E8721C",
+  "lang": "es",
+  "categories": ["productivity", "utilities"],
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
