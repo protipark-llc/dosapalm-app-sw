@@ -332,7 +332,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-10 23:13 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-21 19:52 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -1028,6 +1028,13 @@
             <div id="autoSegs" style="display:flex;gap:2px;margin-top:6px;min-height:10px" title="Cada casilla es un ciclo: pasa el mouse para ver su detalle"></div>
             <div class="muted" style="font-size:10px;margin-top:3px;display:none" id="autoLeyenda"><span style="color:#2e7d32">&#9632;</span> pulsos completos &nbsp; <span style="color:#f5a623">&#9632;</span> incompleto (menos pulsos de los esperados) &nbsp; <span style="color:#d32f2f">&#9632;</span> error/parada &nbsp; <span style="color:#c9ced6">&#9632;</span> pendiente</div>
             <div class="muted" id="autoMsg" style="font-size:11.5px;margin-top:5px">Listo.</div>
+            <div id="autoConfirm" style="display:none;margin-top:8px;padding:10px;border:1px solid var(--orange);border-radius:8px;background:#fff8f2">
+              <div id="autoConfirmTxt" style="font-size:12.5px;font-weight:600;margin-bottom:8px"></div>
+              <div style="display:flex;gap:7px">
+                <button class="btn primary" id="autoConfirmSi" style="flex:1">&#9654; Sí, correr ciclos</button>
+                <button class="btn ghost" id="autoConfirmNo" style="flex:.7">Cancelar</button>
+              </div>
+            </div>
             <div style="display:flex;gap:7px;margin-top:8px">
               <button class="btn primary" id="autoStart" style="flex:1">&#9654; Iniciar</button>
               <button class="btn red" id="autoStop" style="flex:1;display:none">&#9632; Detener</button>
@@ -4231,14 +4238,36 @@ function autoCicloTermino(){
   autoUI()
   auto.tm = setTimeout(autoSiguiente, auto.pausaMs + 100)
 }
+// v15.3: el motivo por el que NO arranca se muestra EN LA TARJETA (antes solo
+// iba a la vista Alertas y el usuario veía "nada"). La confirmación es un
+// cuadro dentro de la tarjeta, no window.confirm(): en Android, si alguna vez
+// se marcó "impedir que esta página cree más cuadros de diálogo", confirm()
+// devuelve false en silencio y el botón parecía muerto.
+function autoBloqueo(msg){
+  const m = $('autoMsg'); m.textContent = '⚠ '+msg; m.style.color = 'var(--red)'
+  setTimeout(()=>{ if(!auto){ m.style.color = ''; } }, 6000)
+  pushAlert(msg,'media')
+}
+let autoPendiente = null
 $('autoStart').onclick = ()=>{
-  if(transport==='none'){ pushAlert('Conéctate al equipo primero','media'); return }
+  $('autoConfirm').style.display = 'none'
+  if(transport==='none'){ autoBloqueo('Conéctate al equipo primero (Bluetooth o Wi-Fi)'); return }
   const p = perfiles.find(x=>x.id===$('autoPerf').value)
-  if(!p){ pushAlert('Elige un perfil (créalo en Dosificar → Perfiles)','media'); return }
-  if(boardConfigured===false){ pushAlert('La tarjeta está SIN CONFIGURAR — envíale la configuración primero','alta'); return }
+  if(!p){ autoBloqueo('Elige un perfil (créalo en Dosificar → Perfiles)'); return }
+  if(boardConfigured===false){ autoBloqueo('La tarjeta responde SIN CONFIGURAR: ve a Configuración y toca "Enviar configuración a la tarjeta"'); send(cmd.configurado()); return }
   const n = Math.max(1, parseInt($('autoN').value,10)||1), min = Math.max(1, parseInt($('autoMin').value,10)||1)
   const pausaMs = Math.max(0, parseInt($('autoPausa').value,10)||0)*1000
-  if(!confirm('Correr ciclos REALES con el perfil "'+p.name+'"\n'+(autoModoSel==='n' ? n+' ciclos' : min+' minutos')+', pausa '+(pausaMs/1000)+' s entre ciclos.\n\nEl equipo va a dosificar de verdad. ¿Continuar?')) return
+  autoPendiente = { p, n, min, pausaMs }
+  $('autoConfirmTxt').textContent = 'Correr ciclos REALES con el perfil "'+p.name+'": '+(autoModoSel==='n' ? n+' ciclos' : min+' minutos')+', pausa '+(pausaMs/1000)+' s entre ciclos. El equipo va a dosificar de verdad.'
+  $('autoConfirm').style.display = ''
+  $('autoMsg').style.color = ''
+}
+$('autoConfirmNo').onclick = ()=>{ $('autoConfirm').style.display = 'none'; autoPendiente = null }
+$('autoConfirmSi').onclick = ()=>{
+  const c = autoPendiente; $('autoConfirm').style.display = 'none'; autoPendiente = null
+  if(!c) return
+  if(transport==='none'){ autoBloqueo('El equipo se desconectó — reconéctate e inténtalo de nuevo'); return }
+  const { p, n, min, pausaMs } = c
   aplicarPerfil(p, true)
   if(!session.active) setOperacionApp(true)
   auto = { modo: autoModoSel, n, hasta: Date.now()+min*60000, pausaMs, hechos:0, err:0, gramos:0, pulsos:0, ciclos:[], t0: Date.now(), esperando:false, pausaHasta:0, wd:null, tm:null }
@@ -4268,6 +4297,7 @@ $('autoReset').onclick = ()=>{
     return
   }
   autoUltimoFinError = false
+  $('autoConfirm').style.display = 'none'; autoPendiente = null; $('autoMsg').style.color = ''   // v15.3
   $('autoBar').style.width = '0%'
   $('autoSegs').innerHTML = ''; $('autoLeyenda').style.display = 'none'   // v15.1
   $('autoMsg').textContent = 'Listo.'
