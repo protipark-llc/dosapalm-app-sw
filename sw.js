@@ -1,5 +1,5 @@
 // DOSAPALM V1 — service worker (PWA). Generado por build-standalone.ts:
-// 202609242152 se reemplaza por el sello de build, así cada publicación crea una
+// 202609242156 se reemplaza por el sello de build, así cada publicación crea una
 // caché nueva y la anterior se borra. Estrategia: RED PRIMERO (siempre la
 // versión más nueva si hay conexión) y caché de respaldo para trabajar sin
 // internet en el campo. El Bluetooth no pasa por aquí.

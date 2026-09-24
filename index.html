@@ -341,7 +341,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-24 21:52 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-24 21:56 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -424,7 +424,7 @@
               <button class="btn ghost" id="perfGuardar" style="flex:1.4">&#128190; Actualizar perfil con la pantalla actual</button>
               <button class="btn ghost" id="perfBorrar" style="flex:.6;color:var(--red);border-color:var(--red)">Eliminar</button>
             </div>
-            <div class="note">Un perfil guarda TODO lo de esta pantalla (dosis, turbina, tiempos, retardo, PWM fijo, pérdida, piñón). <b>+</b> crea uno nuevo con lo que hay en pantalla, <b>&#9998;</b> cambia el nombre, <b>Actualizar</b> sobreescribe el seleccionado. <b>Aplicar</b> lo carga aquí y, si el equipo está conectado, se lo envía. <b>Configuración inicial</b> (Administrador) envía los ajustes de la máquina: tiempos de protección, rampa y tope de turbina, frecuencias y pulsador. <b>Grabar en el equipo</b> deja guardado el perfil en la memoria del equipo: al apagarlo, llevarlo a campo y encenderlo, el pulsador físico aplica con ese perfil sin necesidad de la app. Se comparten con toda la flota por la nube.</div>
+            <div class="note">Un perfil guarda TODO lo de esta pantalla (dosis, turbina, tiempos, retardo, PWM fijo, pérdida, piñón). <b>+</b> crea uno nuevo con lo que hay en pantalla, <b>&#9998;</b> cambia el nombre, <b>Actualizar</b> sobreescribe el seleccionado. <b>Aplicar</b> lo carga aquí y, si el equipo está conectado, se lo envía. <b>Configuración inicial</b> (Administrador) envía los ajustes de la máquina: tiempos de protección, rampa y tope de turbina, pulsador y las frecuencias estándar (turbina 8000 Hz, dosificador 1000 Hz, tolva 500 Hz). <b>Grabar en el equipo</b> deja guardado el perfil en la memoria del equipo: al apagarlo, llevarlo a campo y encenderlo, el pulsador físico aplica con ese perfil sin necesidad de la app. Se comparten con toda la flota por la nube.</div>
             <button class="btn primary block" id="perfGrabar" style="margin-top:7px">&#128242; Grabar este perfil en el equipo</button>
             <div class="muted" id="perfEnEquipo" style="font-size:11px;margin-top:4px">En el equipo: — (conéctalo para ver qué perfil tiene grabado)</div>
           </div>
@@ -4389,7 +4389,18 @@ function grabConfirmada(line){
   renderPerfEnEquipo()
   if(el) el.style.color = 'var(--green-d)'
   pushAlert('✓ "'+nombre+'" grabado en el equipo '+dbSerial()+': dosis '+real.dosis+' g de máquina, turbina '+real.turb+' %, tiempos '+real.tini+'/'+real.tfin+' ms, retardo '+real.retardo+' ms. Ya puedes apagarlo y llevarlo a campo.','info')
-  grabModal(true, 'Perfil grabado con éxito', '"'+nombre+'" quedó guardado en el equipo '+dbSerial()+' (dosis '+real.dosis+' g de máquina, turbina '+real.turb+' %, tiempos '+real.tini+'/'+real.tfin+' ms, retardo '+real.retardo+' ms). Ya puedes apagarlo y llevarlo a campo: al encender, sostén el pulsador 5 s para iniciar la operación.')
+  const tvg = turbVel.find(t=>t.pct===real.turb)
+  grabModal(true, 'Perfil grabado con éxito', 'Valores confirmados por el equipo. Ya puedes apagarlo y llevarlo a campo: al encender, sostén el pulsador 5 s para iniciar la operación y luego usa toques cortos para aplicar.', [
+    ['Perfil', nombre],
+    ['Equipo', dbSerial()],
+    ['Dosis de máquina', real.dosis+' g'+(g.nombre ? '' : '')],
+    ['Dosis a la salida de la manguera', dose.dosis+' g (pérdida '+dose.perdida+' %)'],
+    ['Turbina', real.turb+' %'+(tvg?' · '+tvg.ms+' m/s':'')],
+    ['Tiempo inicial', real.tini+' ms'],
+    ['Tiempo final', real.tfin+' ms'],
+    ['Retardo entre cavidades', real.retardo+' ms'],
+    ['PWM fijo dosificador', real.dutyfijo+' %'],
+  ])
   return true
 }
 $('btnCfgDev').onclick = ()=>{ grabarEnEquipo(null) }
@@ -4397,17 +4408,58 @@ $('btnCfgDev').onclick = ()=>{ grabarEnEquipo(null) }
 // Configuración → Tarjeta (tiempos, guardián, rearme, rampa, tope, frecuencias,
 // pulsador, guardar + marca de configurada). El resultado se refleja aquí
 // mismo. Orden recomendado: 1) configuración inicial, 2) grabar el perfil.
+// v15.7: la configuración inicial FIJA las frecuencias estándar de campo
+// (turbina 8 kHz, dosificador 1 kHz, tolva 500 Hz) y exige que el equipo
+// confirme cada una ("Frecuencia TURB = 8000 Hz"...) además de la marca de
+// configurado. Quedan también como las frecuencias de la app (y de la nube).
+const FREC_ESTANDAR = { turb: 8000, dosf: 1000, tol: 500 }
 $('perfCfgIni').onclick = ()=>{
   if(profile!=='admin'){ pushAlert('La configuración inicial la envía el Administrador','media'); return }
   if(transport==='none'){ pushAlert('Conecta el equipo primero (Bluetooth o Wi-Fi)','media'); return }
   if(typeof cicloEnCurso==='function' && cicloEnCurso()){ pushAlert('Espera a que termine el ciclo en curso','media'); return }
-  const el = $('perfEnEquipo'); el.style.color = ''; el.textContent = 'Enviando configuración inicial…'
+  pwmFreq = { ...FREC_ESTANDAR }
+  try{ localStorage.setItem('dp_freq', JSON.stringify(pwmFreq)) }catch(e){}
+  ;[['fqTurb','turb'],['fqDosf','dosf'],['fqTol','tol']].forEach(([id,m])=>{ const e=$(id); if(e) e.value = String(pwmFreq[m]) })
+  fqPending = {}   // captura "Frecuencia X = N Hz" de este envío
+  const el = $('perfEnEquipo'); el.style.color = ''; el.textContent = 'Enviando configuración inicial (con frecuencias 8000 / 1000 / 500 Hz)…'
   $('btnSendCfg').click()
   const t0 = Date.now()
   const iv = setInterval(()=>{
     const m = $('cfgMsg').textContent
-    if(m.indexOf('confirmó: configuración aplicada')>=0){ clearInterval(iv); el.style.color = 'var(--green-d)'; el.textContent = '✓ Configuración inicial aplicada en el equipo '+dbSerial()+'. Ahora graba el perfil de trabajo.'; grabModal(true, 'Configuración inicial enviada con éxito', 'El equipo '+dbSerial()+' confirmó la configuración y quedó marcado como configurado. Siguiente paso: elige el perfil de trabajo y toca Grabar este perfil en el equipo.') }
-    else if(m.indexOf('no confirmó')>=0 || Date.now()-t0 > 9500){ clearInterval(iv); el.style.color = 'var(--red)'; el.textContent = '⚠ El equipo no confirmó la configuración inicial. Revisa la conexión y vuelve a intentar.'; grabModal(false, 'No se pudo confirmar la configuración', 'El equipo no respondió. Revisa la conexión (Bluetooth o Wi-Fi) y vuelve a tocar Enviar configuración inicial.') }
+    const f = fqPending || {}
+    const frecOk = f.TURB===FREC_ESTANDAR.turb && f.DOSF===FREC_ESTANDAR.dosf && f.TOL===FREC_ESTANDAR.tol
+    const cfgOk = m.indexOf('confirmó: configuración aplicada')>=0
+    if(cfgOk && frecOk){
+      clearInterval(iv); fqPending = null
+      el.style.color = 'var(--green-d)'; el.textContent = '✓ Configuración inicial aplicada en el equipo '+dbSerial()+' (frecuencias 8000 / 1000 / 500 Hz). Ahora graba el perfil de trabajo.'
+      const num = (id, def)=> parseInt($(id).value||def,10)||Number(def)
+      const tv = turbVel.find(t=>t.pct===dose.turb)
+      grabModal(true, 'Configuración inicial enviada con éxito', 'El equipo '+dbSerial()+' confirmó la configuración y quedó marcado como configurado. Siguiente paso: elige el perfil de trabajo y toca Grabar este perfil en el equipo.', [
+        ['Equipo', dbSerial()],
+        ['Frecuencia turbina', '8000 Hz ✓'],
+        ['Frecuencia dosificador', '1000 Hz ✓'],
+        ['Frecuencia tolva', '500 Hz ✓'],
+        ['Tope turbina', num('turbMax','78')+' %'],
+        ['Rampa turbina', num('rampaMs','2000')+' ms'],
+        ['Guardián de atasco', num('atascoMs','5000')+' ms'],
+        ['Rearme anti-repetición', num('rearmeMs','2000')+' ms'],
+        ['Pulsación operación', num('holdOpMs','5000')+' ms'],
+        ['Pulsación Bluetooth', num('holdBtMs','3000')+' ms'],
+        ['Antirrebote pulsador', num('reboteMs','150')+' ms'],
+        ['Dosis de máquina', dosisComando()+' g (salida manguera '+dose.dosis+' g)'],
+        ['Turbina', dose.turb+' %'+(tv?' · '+tv.ms+' m/s':'')],
+        ['Tiempo inicial / final', dose.tini+' / '+dose.tfin+' ms'],
+        ['Retardo entre cavidades', dose.retardo+' ms'],
+        ['PWM fijo dosificador', (dose.dutyFijo||0)+' %'],
+      ])
+    } else if(m.indexOf('no confirmó')>=0 || Date.now()-t0 > 9500){
+      clearInterval(iv)
+      const falta = ['TURB','DOSF','TOL'].filter(k=> f[k]!==FREC_ESTANDAR[k.toLowerCase()]).map(k=>({TURB:'turbina',DOSF:'dosificador',TOL:'tolva'})[k])
+      fqPending = null
+      const que = !cfgOk ? 'la configuración' : ('la frecuencia de: '+falta.join(', '))
+      el.style.color = 'var(--red)'; el.textContent = '⚠ El equipo no confirmó '+que+'. Revisa la conexión y vuelve a intentar.'
+      grabModal(false, 'No se pudo confirmar la configuración', 'El equipo no confirmó '+que+'. Revisa la conexión (Bluetooth o Wi-Fi) y vuelve a tocar Enviar configuración inicial.')
+    }
   }, 300)
 }
 $('perfGrabar').onclick = ()=>{
@@ -5268,13 +5320,22 @@ setInterval(()=>{ const d=new Date(); $('clock').textContent=d.getHours()+':'+St
   <div style="background:#fff;border-radius:16px;max-width:380px;width:100%;padding:22px 20px;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,.25)">
     <div id="grabModalIco" style="width:56px;height:56px;border-radius:50%;margin:0 auto 10px;display:flex;align-items:center;justify-content:center;font-size:30px;color:#fff;background:#2f8a34">&#10003;</div>
     <div id="grabModalTit" style="font-weight:800;font-size:17px;margin-bottom:6px"></div>
-    <div id="grabModalTxt" style="font-size:13px;color:#4a5566;line-height:1.45;margin-bottom:16px"></div>
+    <div id="grabModalTxt" style="font-size:13px;color:#4a5566;line-height:1.45;margin-bottom:10px"></div>
+    <div id="grabModalRes" style="display:none;text-align:left;max-height:46vh;overflow:auto;border:1px solid #e6e9ef;border-radius:10px;margin-bottom:14px"></div>
     <button class="btn primary block" id="grabModalOk">Aceptar</button>
   </div>
 </div>
 <script>
-function grabModal(ok, titulo, texto){
+function grabModal(ok, titulo, texto, resumen){
   const m = document.getElementById('grabModal'); if(!m) return
+  // v15.7: resumen de lo configurado — [[parámetro, valor], ...]
+  const r = document.getElementById('grabModalRes')
+  if(resumen && resumen.length){
+    const esc = t=> String(t).replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'})[c])
+    r.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:12.5px">'+resumen.map((f,i)=>
+      '<tr style="background:'+(i%2?'#fff':'#f6f8fb')+'"><td style="padding:6px 10px;color:#6b7280">'+esc(f[0])+'</td><td style="padding:6px 10px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums">'+esc(f[1])+'</td></tr>').join('')+'</table>'
+    r.style.display = ''
+  } else { r.innerHTML = ''; r.style.display = 'none' }
   document.getElementById('grabModalIco').innerHTML = ok ? '&#10003;' : '!'
   document.getElementById('grabModalIco').style.background = ok ? '#2f8a34' : '#e04b4b'
   document.getElementById('grabModalTit').textContent = titulo
