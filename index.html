@@ -341,7 +341,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-24 22:04 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-24 22:09 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -419,12 +419,11 @@
               <button class="btn ghost" id="perfRenombrar" title="Editar el nombre del perfil seleccionado" style="flex-shrink:0;width:40px;padding:0;font-size:16px;line-height:1">&#9998;</button>
               <button class="btn primary" id="perfAplicar" style="flex-shrink:0">Aplicar</button>
             </div>
-            <button class="btn ghost block" id="perfCfgIni" style="margin-top:7px">&#9881; Enviar configuración inicial al equipo</button>
             <div style="display:flex;gap:7px;margin-top:7px">
               <button class="btn ghost" id="perfGuardar" style="flex:1.4">&#128190; Actualizar perfil con la pantalla actual</button>
               <button class="btn ghost" id="perfBorrar" style="flex:.6;color:var(--red);border-color:var(--red)">Eliminar</button>
             </div>
-            <div class="note">Un perfil guarda TODO lo de esta pantalla (dosis, turbina, tiempos, retardo, PWM fijo, pérdida, piñón). <b>+</b> crea uno nuevo con lo que hay en pantalla, <b>&#9998;</b> cambia el nombre, <b>Actualizar</b> sobreescribe el seleccionado. <b>Aplicar</b> lo carga aquí y, si el equipo está conectado, se lo envía. <b>Configuración inicial</b> (Administrador) envía los ajustes de la máquina: tiempos de protección, rampa y tope de turbina, pulsador y las frecuencias estándar (turbina 8000 Hz, dosificador 1000 Hz, tolva 500 Hz). Para dejarlo en el equipo, aplica el perfil y usa <b>Grabar en el equipo</b> (debajo del ciclo de 3 etapas). Se comparten con toda la flota por la nube.</div>
+            <div class="note">Un perfil guarda TODO lo de esta pantalla (dosis, turbina, tiempos, retardo, PWM fijo, pérdida, piñón). <b>+</b> crea uno nuevo con lo que hay en pantalla, <b>&#9998;</b> cambia el nombre, <b>Actualizar</b> sobreescribe el seleccionado. <b>Aplicar</b> lo carga aquí y, si el equipo está conectado, se lo envía. Para dejarlo en el equipo, aplica el perfil y usa <b>Grabar en el equipo</b> (debajo del ciclo de 3 etapas). Se comparten con toda la flota por la nube.</div>
           </div>
           <!-- VISTA SENCILLA (dummie): cards grandes e iguales; se activa en Configuración -->
           <div id="dumFields" style="display:none">
@@ -474,9 +473,11 @@
             <div class="muted" style="font-size:10px;margin-top:6px;line-height:1.5"><b>1)</b> Solo turbina (T. inicial): limpia el ducto de residuos. <b>2)</b> Turbina + dosificador + tolva: aplica hasta completar los gramos (dura lo que marque el conteo hall). <b>3)</b> Solo turbina (T. final): expulsa el material residual.</div>
           </div>
           <!-- v15.8: UNA sola opción para dejar la configuración grabada en el equipo -->
-          <button class="btn primary block" id="btnGrabarEquipo" style="margin-top:4px">&#128242; Grabar en el equipo</button>
+          <!-- v15.9: configuración inicial (solo Admin) justo encima de Grabar, en azul para distinguirla -->
+          <button class="btn block" id="perfCfgIni" style="margin-top:4px;background:var(--blue);border-color:var(--blue);color:#fff;font-weight:700">&#9881; Enviar configuración inicial al equipo</button>
+          <button class="btn primary block" id="btnGrabarEquipo" style="margin-top:8px">&#128242; Grabar en el equipo</button>
           <div class="muted" id="perfEnEquipo" style="font-size:11px;margin-top:4px">En el equipo: — (conéctalo para ver qué tiene grabado)</div>
-          <div class="note">Graba en la <b>memoria del equipo</b> la dosis, velocidad, tiempos, retardo y PWM fijo de esta pantalla (si aplicaste un perfil, queda registrado con su nombre). Son los que usa el pulsador físico aunque el equipo se apague: prográmalo aquí, apágalo, llévalo a campo y al encender sostén el pulsador 5 s para iniciar la operación.</div>
+          <div class="note"><b>Configuración inicial</b> (Administrador, botón azul): ajustes de la máquina — protección, rampa y tope de turbina, pulsador y frecuencias estándar (turbina 8000 Hz, dosificador 1000 Hz, tolva 500 Hz). Envíala primero. <b>Grabar en el equipo</b> graba en la <b>memoria del equipo</b> la dosis, velocidad, tiempos, retardo y PWM fijo de esta pantalla (si aplicaste un perfil, queda registrado con su nombre). Son los que usa el pulsador físico aunque el equipo se apague: prográmalo aquí, apágalo, llévalo a campo y al encender sostén el pulsador 5 s para iniciar la operación.</div>
           <!-- acciones principales: dos cards grandes del mismo tamaño -->
           <div class="actgrid">
             <button class="actcard session" id="btnSession" title="Inicia una operación para acumular las aplicaciones"><span class="aic">&#9654;</span>Iniciar operación<span class="asub">guarda las aplicaciones en Data</span></button>
