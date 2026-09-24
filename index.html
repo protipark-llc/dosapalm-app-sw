@@ -341,7 +341,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-21 20:21 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-24 19:57 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -419,11 +419,13 @@
               <button class="btn ghost" id="perfRenombrar" title="Editar el nombre del perfil seleccionado" style="flex-shrink:0;width:40px;padding:0;font-size:16px;line-height:1">&#9998;</button>
               <button class="btn primary" id="perfAplicar" style="flex-shrink:0">Aplicar</button>
             </div>
+            <button class="btn primary block" id="perfGrabar" style="margin-top:7px">&#128242; Grabar este perfil en el equipo</button>
+            <div class="muted" id="perfEnEquipo" style="font-size:11px;margin-top:4px">En el equipo: — (conéctalo para ver qué perfil tiene grabado)</div>
             <div style="display:flex;gap:7px;margin-top:7px">
               <button class="btn ghost" id="perfGuardar" style="flex:1.4">&#128190; Actualizar perfil con la pantalla actual</button>
               <button class="btn ghost" id="perfBorrar" style="flex:.6;color:var(--red);border-color:var(--red)">Eliminar</button>
             </div>
-            <div class="note">Un perfil guarda TODO lo de esta pantalla (dosis, turbina, tiempos, retardo, PWM fijo, pérdida, piñón). <b>+</b> crea uno nuevo con lo que hay en pantalla, <b>&#9998;</b> cambia el nombre, <b>Actualizar</b> sobreescribe el seleccionado. <b>Aplicar</b> lo carga aquí y, si el equipo está conectado, se lo envía. Se comparten con toda la flota por la nube.</div>
+            <div class="note">Un perfil guarda TODO lo de esta pantalla (dosis, turbina, tiempos, retardo, PWM fijo, pérdida, piñón). <b>+</b> crea uno nuevo con lo que hay en pantalla, <b>&#9998;</b> cambia el nombre, <b>Actualizar</b> sobreescribe el seleccionado. <b>Aplicar</b> lo carga aquí y, si el equipo está conectado, se lo envía. <b>Grabar en el equipo</b> lo deja guardado en la memoria del equipo: al apagarlo, llevarlo a campo y encenderlo, el pulsador físico aplica con ese perfil sin necesidad de la app. Se comparten con toda la flota por la nube.</div>
           </div>
           <!-- VISTA SENCILLA (dummie): cards grandes e iguales; se activa en Configuración -->
           <div id="dumFields" style="display:none">
@@ -1903,6 +1905,7 @@ renderBat()
 let verTimer = null
 function onOpen(kind){
   transport = kind
+  setTimeout(()=>{ try{ renderPerfEnEquipo() }catch(e){} }, 2500)   // v15.5: cuando ya llegó el serial
   lastEndDevMs = 0   // v15.4: reloj [ms] del equipo anterior no vale para este
   connChan = (kind==='ble') ? 'ble' : 'wifi'   // la radio activa es por la que entramos
   try{ localStorage.setItem('dp_lasttr', kind) }catch(e){}   // v11.1: para reconectar tras F5
@@ -2494,7 +2497,7 @@ function onLine(line){
   }
   // v10.1: confirmación de la configuración de dosificación persistida
   if(/CONFIG GUARDADA/.test(line)){
-    pushAlert('✓ Datos de dosificación guardados en el equipo: valen para todos los ciclos del operario (botón físico incluido), aun tras reiniciar.','info')
+    if(!grabConfirmada(line)) pushAlert('✓ Datos de dosificación guardados en el equipo: valen para todos los ciclos del operario (botón físico incluido), aun tras reiniciar.','info')
   }
   // v10.8: confirmación de purga — la memoria del equipo quedó libre
   let mAck
@@ -4327,15 +4330,70 @@ renderPerfiles()
 $('btnDosificar').onclick = ejecutar
 // v10.1: guardar la configuración de Dosificar EN el equipo (persistente):
 // vale para todos los ciclos del operario, botón físico incluido.
-$('btnCfgDev').onclick = ()=>{
-  if(transport==='none'){ log('!! Conecta el equipo primero (Wi-Fi o Bluetooth)'); return }
+// v15.5: GRABAR EN EL EQUIPO — envía lo que hay en Dosificar, lo persiste
+// (`guardar`) y VERIFICA la respuesta "CONFIG GUARDADA" campo a campo. El
+// firmware ya persiste dosis, turbina, tiempos, retardo y PWM fijo (NVS) y los
+// usa el pulsador físico tras apagar/encender: no requiere actualizar firmware.
+// La app recuerda qué perfil quedó grabado en cada equipo (por serial).
+let grabPend = null
+let perfEnEquipo = {}
+try{ perfEnEquipo = JSON.parse(localStorage.getItem('dp_perfenequipo')||'{}') }catch(e){}
+function renderPerfEnEquipo(){
+  const el = $('perfEnEquipo'); if(!el) return
+  if(transport==='none'){ el.textContent = 'En el equipo: — (conéctalo para ver qué perfil tiene grabado)'; el.style.color=''; return }
+  const r = perfEnEquipo[dbSerial()]
+  el.style.color = ''
+  el.textContent = r ? ('En el equipo '+dbSerial()+': "'+r.name+'" · grabado '+new Date(r.at).toLocaleString()) : ('En el equipo '+dbSerial()+': sin perfil grabado desde esta app')
+}
+function grabarEnEquipo(nombre){
+  if(transport==='none'){ pushAlert('Conecta el equipo primero (Bluetooth o Wi-Fi)','media'); return false }
+  if(typeof cicloEnCurso==='function' && cicloEnCurso()){ pushAlert('Espera a que termine el ciclo en curso para grabar','media'); return false }
+  const esperado = { dosis: Math.round(dosisComando()), turb: dose.turb, tini: dose.tini, tfin: dose.tfin, retardo: dose.retardo, dutyfijo: dose.dutyFijo||0 }
+  clearTimeout(grabPend && grabPend.tm)
+  grabPend = { nombre, esperado, tm: setTimeout(()=>{
+    if(!grabPend) return
+    grabPend = null
+    const el = $('perfEnEquipo'); if(el){ el.textContent = '⚠ El equipo no confirmó la grabación. Revisa la conexión y vuelve a intentar.'; el.style.color = 'var(--red)' }
+    pushAlert('⚠ El equipo no confirmó la grabación en 8 s: vuelve a intentarlo','warn')
+  }, 8000) }
+  const el = $('perfEnEquipo'); if(el){ el.textContent = 'Grabando en el equipo…'; el.style.color = '' }
   send(cmd.modo('real'))
-  send(cmd.dosis(dosisComando()))
-  send(cmd.motor('turb', dose.turb))
-  send(cmd.tini(dose.tini)); send(cmd.tfin(dose.tfin))
-  send(cmd.retardo(dose.retardo))
-  send(cmd.dutyFijo(dose.dutyFijo||0))
+  send(cmd.dosis(esperado.dosis))
+  send(cmd.motor('turb', esperado.turb))
+  send(cmd.tini(esperado.tini)); send(cmd.tfin(esperado.tfin))
+  send(cmd.retardo(esperado.retardo))
+  send(cmd.dutyFijo(esperado.dutyfijo))
   send(cmd.guardar())
+  return true
+}
+function grabConfirmada(line){
+  if(!grabPend) return false
+  const m = /CONFIG GUARDADA: dosis (\d+) g \| turbina (\d+)% \| tini (\d+) ms \| tfin (\d+) ms \| retardo (\d+) ms \| dutyfijo (\d+)%/.exec(line)
+  if(!m) return false
+  const g = grabPend; grabPend = null; clearTimeout(g.tm)
+  const real = { dosis:+m[1], turb:+m[2], tini:+m[3], tfin:+m[4], retardo:+m[5], dutyfijo:+m[6] }
+  const dif = Object.keys(g.esperado).filter(k=> real[k]!==g.esperado[k])
+  const el = $('perfEnEquipo')
+  if(dif.length){
+    if(el){ el.textContent = '⚠ El equipo grabó valores distintos en: '+dif.join(', ')+'. Vuelve a grabar.'; el.style.color = 'var(--red)' }
+    pushAlert('⚠ Grabación con diferencias ('+dif.join(', ')+'): vuelve a grabar','warn')
+    return true
+  }
+  const nombre = g.nombre || 'Configuración de Dosificar'
+  perfEnEquipo[dbSerial()] = { name: nombre, at: Date.now(), valores: real }
+  try{ localStorage.setItem('dp_perfenequipo', JSON.stringify(perfEnEquipo)) }catch(e){}
+  renderPerfEnEquipo()
+  if(el) el.style.color = 'var(--green-d)'
+  pushAlert('✓ "'+nombre+'" grabado en el equipo '+dbSerial()+': dosis '+real.dosis+' g de máquina, turbina '+real.turb+' %, tiempos '+real.tini+'/'+real.tfin+' ms, retardo '+real.retardo+' ms. Ya puedes apagarlo y llevarlo a campo.','info')
+  return true
+}
+$('btnCfgDev').onclick = ()=>{ grabarEnEquipo(null) }
+$('perfGrabar').onclick = ()=>{
+  const p = perfiles.find(x=>x.id===$('perfSel').value)
+  if(!p){ pushAlert('Elige un perfil (o créalo con +) para grabarlo en el equipo','media'); return }
+  if(transport==='none'){ pushAlert('Conecta el equipo primero (Bluetooth o Wi-Fi)','media'); return }
+  aplicarPerfil(p, false)   // carga el perfil en pantalla; grabarEnEquipo lo envía y lo persiste
+  grabarEnEquipo(p.name)
 }
 // SAFE de emergencia: detiene la dosificación y apaga TODAS las salidas.
 $('btnSafe').onclick = ()=>{
