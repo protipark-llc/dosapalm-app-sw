@@ -341,7 +341,7 @@
           <input type="password" class="pwin" id="loginPw" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" autocomplete="current-password"/>
           <div class="warnbox" id="loginErr" style="display:none">Contraseña incorrecta</div>
           <button class="btn primary block" id="btnLogin" style="margin-top:12px">Ingresar</button>
-          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-24 19:57 UTC</div>
+          <div class="muted" style="text-align:center;font-size:10px;margin-top:10px">build 2026-09-24 21:52 UTC</div>
           <div class="note" style="text-align:center">Las contraseñas se cambian en <b>Perfil</b> una vez adentro.<br/>Iniciales: admin <code>admin123</code> · operador <code>1234</code></div>
         </div>
       </div>
@@ -419,13 +419,14 @@
               <button class="btn ghost" id="perfRenombrar" title="Editar el nombre del perfil seleccionado" style="flex-shrink:0;width:40px;padding:0;font-size:16px;line-height:1">&#9998;</button>
               <button class="btn primary" id="perfAplicar" style="flex-shrink:0">Aplicar</button>
             </div>
-            <button class="btn primary block" id="perfGrabar" style="margin-top:7px">&#128242; Grabar este perfil en el equipo</button>
-            <div class="muted" id="perfEnEquipo" style="font-size:11px;margin-top:4px">En el equipo: — (conéctalo para ver qué perfil tiene grabado)</div>
+            <button class="btn ghost block" id="perfCfgIni" style="margin-top:7px">&#9881; Enviar configuración inicial al equipo</button>
             <div style="display:flex;gap:7px;margin-top:7px">
               <button class="btn ghost" id="perfGuardar" style="flex:1.4">&#128190; Actualizar perfil con la pantalla actual</button>
               <button class="btn ghost" id="perfBorrar" style="flex:.6;color:var(--red);border-color:var(--red)">Eliminar</button>
             </div>
-            <div class="note">Un perfil guarda TODO lo de esta pantalla (dosis, turbina, tiempos, retardo, PWM fijo, pérdida, piñón). <b>+</b> crea uno nuevo con lo que hay en pantalla, <b>&#9998;</b> cambia el nombre, <b>Actualizar</b> sobreescribe el seleccionado. <b>Aplicar</b> lo carga aquí y, si el equipo está conectado, se lo envía. <b>Grabar en el equipo</b> lo deja guardado en la memoria del equipo: al apagarlo, llevarlo a campo y encenderlo, el pulsador físico aplica con ese perfil sin necesidad de la app. Se comparten con toda la flota por la nube.</div>
+            <div class="note">Un perfil guarda TODO lo de esta pantalla (dosis, turbina, tiempos, retardo, PWM fijo, pérdida, piñón). <b>+</b> crea uno nuevo con lo que hay en pantalla, <b>&#9998;</b> cambia el nombre, <b>Actualizar</b> sobreescribe el seleccionado. <b>Aplicar</b> lo carga aquí y, si el equipo está conectado, se lo envía. <b>Configuración inicial</b> (Administrador) envía los ajustes de la máquina: tiempos de protección, rampa y tope de turbina, frecuencias y pulsador. <b>Grabar en el equipo</b> deja guardado el perfil en la memoria del equipo: al apagarlo, llevarlo a campo y encenderlo, el pulsador físico aplica con ese perfil sin necesidad de la app. Se comparten con toda la flota por la nube.</div>
+            <button class="btn primary block" id="perfGrabar" style="margin-top:7px">&#128242; Grabar este perfil en el equipo</button>
+            <div class="muted" id="perfEnEquipo" style="font-size:11px;margin-top:4px">En el equipo: — (conéctalo para ver qué perfil tiene grabado)</div>
           </div>
           <!-- VISTA SENCILLA (dummie): cards grandes e iguales; se activa en Configuración -->
           <div id="dumFields" style="display:none">
@@ -3762,6 +3763,7 @@ function applyProfileUi(){
   $('pfName').textContent = admin ? 'Administrador' : 'Operador'
   $('pfIcon').innerHTML = admin ? '&#9881;' : '&#128100;'
   $('perfilSub').textContent = admin ? 'Administrador' : 'Operador'
+  if($('perfCfgIni')) $('perfCfgIni').style.display = admin ? '' : 'none'   // v15.6
 }
 // v10.9: entrar a la app con un perfil (login o reingreso automático al recargar)
 function entrarApp(perfil){
@@ -4355,6 +4357,7 @@ function grabarEnEquipo(nombre){
     grabPend = null
     const el = $('perfEnEquipo'); if(el){ el.textContent = '⚠ El equipo no confirmó la grabación. Revisa la conexión y vuelve a intentar.'; el.style.color = 'var(--red)' }
     pushAlert('⚠ El equipo no confirmó la grabación en 8 s: vuelve a intentarlo','warn')
+    grabModal(false, 'No se pudo confirmar la grabación', 'El equipo no respondió en 8 segundos. Revisa la conexión (Bluetooth o Wi-Fi) y vuelve a tocar Grabar.')
   }, 8000) }
   const el = $('perfEnEquipo'); if(el){ el.textContent = 'Grabando en el equipo…'; el.style.color = '' }
   send(cmd.modo('real'))
@@ -4377,6 +4380,7 @@ function grabConfirmada(line){
   if(dif.length){
     if(el){ el.textContent = '⚠ El equipo grabó valores distintos en: '+dif.join(', ')+'. Vuelve a grabar.'; el.style.color = 'var(--red)' }
     pushAlert('⚠ Grabación con diferencias ('+dif.join(', ')+'): vuelve a grabar','warn')
+    grabModal(false, 'Grabación con diferencias', 'El equipo guardó valores distintos en: '+dif.join(', ')+'. Si es la turbina, el perfil supera el tope configurado. Vuelve a grabar o ajusta el perfil.')
     return true
   }
   const nombre = g.nombre || 'Configuración de Dosificar'
@@ -4385,9 +4389,27 @@ function grabConfirmada(line){
   renderPerfEnEquipo()
   if(el) el.style.color = 'var(--green-d)'
   pushAlert('✓ "'+nombre+'" grabado en el equipo '+dbSerial()+': dosis '+real.dosis+' g de máquina, turbina '+real.turb+' %, tiempos '+real.tini+'/'+real.tfin+' ms, retardo '+real.retardo+' ms. Ya puedes apagarlo y llevarlo a campo.','info')
+  grabModal(true, 'Perfil grabado con éxito', '"'+nombre+'" quedó guardado en el equipo '+dbSerial()+' (dosis '+real.dosis+' g de máquina, turbina '+real.turb+' %, tiempos '+real.tini+'/'+real.tfin+' ms, retardo '+real.retardo+' ms). Ya puedes apagarlo y llevarlo a campo: al encender, sostén el pulsador 5 s para iniciar la operación.')
   return true
 }
 $('btnCfgDev').onclick = ()=>{ grabarEnEquipo(null) }
+// v15.6: CONFIGURACIÓN INICIAL desde Dosificar — el mismo envío completo de
+// Configuración → Tarjeta (tiempos, guardián, rearme, rampa, tope, frecuencias,
+// pulsador, guardar + marca de configurada). El resultado se refleja aquí
+// mismo. Orden recomendado: 1) configuración inicial, 2) grabar el perfil.
+$('perfCfgIni').onclick = ()=>{
+  if(profile!=='admin'){ pushAlert('La configuración inicial la envía el Administrador','media'); return }
+  if(transport==='none'){ pushAlert('Conecta el equipo primero (Bluetooth o Wi-Fi)','media'); return }
+  if(typeof cicloEnCurso==='function' && cicloEnCurso()){ pushAlert('Espera a que termine el ciclo en curso','media'); return }
+  const el = $('perfEnEquipo'); el.style.color = ''; el.textContent = 'Enviando configuración inicial…'
+  $('btnSendCfg').click()
+  const t0 = Date.now()
+  const iv = setInterval(()=>{
+    const m = $('cfgMsg').textContent
+    if(m.indexOf('confirmó: configuración aplicada')>=0){ clearInterval(iv); el.style.color = 'var(--green-d)'; el.textContent = '✓ Configuración inicial aplicada en el equipo '+dbSerial()+'. Ahora graba el perfil de trabajo.'; grabModal(true, 'Configuración inicial enviada con éxito', 'El equipo '+dbSerial()+' confirmó la configuración y quedó marcado como configurado. Siguiente paso: elige el perfil de trabajo y toca Grabar este perfil en el equipo.') }
+    else if(m.indexOf('no confirmó')>=0 || Date.now()-t0 > 9500){ clearInterval(iv); el.style.color = 'var(--red)'; el.textContent = '⚠ El equipo no confirmó la configuración inicial. Revisa la conexión y vuelve a intentar.'; grabModal(false, 'No se pudo confirmar la configuración', 'El equipo no respondió. Revisa la conexión (Bluetooth o Wi-Fi) y vuelve a tocar Enviar configuración inicial.') }
+  }, 300)
+}
 $('perfGrabar').onclick = ()=>{
   const p = perfiles.find(x=>x.id===$('perfSel').value)
   if(!p){ pushAlert('Elige un perfil (o créalo con +) para grabarlo en el equipo','media'); return }
@@ -5240,6 +5262,26 @@ applyViewMode()
 buildTabs(); newTracker(); render()
 setInterval(()=>{ const d=new Date(); $('clock').textContent=d.getHours()+':'+String(d.getMinutes()).padStart(2,'0') }, 1000)
 })()
+</script>
+<!-- v15.6: ventana de confirmación de grabado (éxito / error) -->
+<div id="grabModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(20,24,32,.45);align-items:center;justify-content:center;padding:16px">
+  <div style="background:#fff;border-radius:16px;max-width:380px;width:100%;padding:22px 20px;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,.25)">
+    <div id="grabModalIco" style="width:56px;height:56px;border-radius:50%;margin:0 auto 10px;display:flex;align-items:center;justify-content:center;font-size:30px;color:#fff;background:#2f8a34">&#10003;</div>
+    <div id="grabModalTit" style="font-weight:800;font-size:17px;margin-bottom:6px"></div>
+    <div id="grabModalTxt" style="font-size:13px;color:#4a5566;line-height:1.45;margin-bottom:16px"></div>
+    <button class="btn primary block" id="grabModalOk">Aceptar</button>
+  </div>
+</div>
+<script>
+function grabModal(ok, titulo, texto){
+  const m = document.getElementById('grabModal'); if(!m) return
+  document.getElementById('grabModalIco').innerHTML = ok ? '&#10003;' : '!'
+  document.getElementById('grabModalIco').style.background = ok ? '#2f8a34' : '#e04b4b'
+  document.getElementById('grabModalTit').textContent = titulo
+  document.getElementById('grabModalTxt').textContent = texto
+  m.style.display = 'flex'
+}
+document.getElementById('grabModalOk').onclick = ()=>{ document.getElementById('grabModal').style.display = 'none' }
 </script>
 <script>
 // v15.4: PWA — service worker solo en https (GitHub Pages); en file:// o http
